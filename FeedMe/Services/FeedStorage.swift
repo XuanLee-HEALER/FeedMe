@@ -39,7 +39,9 @@ final class FeedStorage {
         let dbURL = feedMeURL.appendingPathComponent("feedme.db")
 
         // 创建数据库队列
-        dbQueue = try DatabaseQueue(path: dbURL.path)
+        var config = Configuration()
+        config.foreignKeysEnabled = true  // 显式启用外键约束
+        dbQueue = try DatabaseQueue(path: dbURL.path, configuration: config)
 
         // 运行迁移
         try migrator.migrate(dbQueue)
@@ -106,7 +108,7 @@ extension FeedStorage {
 
     /// 删除订阅源
     func deleteSource(id: String) throws {
-        try dbQueue.write { db in
+        _ = try dbQueue.write { db in
             try FeedSource.deleteOne(db, key: id)
         }
     }
@@ -241,7 +243,7 @@ extension FeedStorage {
 
     /// 删除某个源的所有文章
     func deleteItems(for sourceId: String) throws {
-        try dbQueue.write { db in
+        _ = try dbQueue.write { db in
             try FeedItem
                 .filter(FeedItem.Columns.sourceId == sourceId)
                 .deleteAll(db)

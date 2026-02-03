@@ -24,8 +24,21 @@ final class FeedFetcher: Sendable {
     /// 超时时间（秒）
     private let timeout: TimeInterval = 15
 
+    /// 最大响应大小（10MB）
+    private let maxResponseSize = 10 * 1024 * 1024
+
     /// User-Agent
     private let userAgent = "FeedMe/1.0"
+
+    /// 允许的内容类型
+    private let allowedContentTypes = [
+        "application/rss+xml",
+        "application/atom+xml",
+        "application/xml",
+        "text/xml",
+        "application/json",
+        "text/html"  // 用于 Feed 自动发现
+    ]
 
     /// 单例
     static let shared = FeedFetcher()
@@ -75,6 +88,19 @@ final class FeedFetcher: Sendable {
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw FeedError.unknown("非 HTTP 响应")
+            }
+
+            // 检查响应大小
+            if data.count > maxResponseSize {
+                throw FeedError.parseError("响应过大（超过 10MB）")
+            }
+
+            // 检查内容类型（如果有的话）
+            if let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() {
+                let isAllowed = allowedContentTypes.contains { contentType.contains($0) }
+                if !isAllowed && !contentType.contains("text/") {
+                    throw FeedError.parseError("不支持的内容类型: \(contentType)")
+                }
             }
 
             // 处理 HTTP 状态码

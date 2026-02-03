@@ -38,3 +38,4 @@ Carthage/Checkouts/
 *.ipa
 *.dSYM.zip
 *.dSYM
+*.zip

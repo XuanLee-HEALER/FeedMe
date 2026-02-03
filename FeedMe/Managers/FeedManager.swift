@@ -49,10 +49,6 @@ final class FeedManager: ObservableObject {
         guard !isRefreshing else { return }
 
         isRefreshing = true
-        defer {
-            isRefreshing = false
-            lastRefreshDate = Date()
-        }
 
         do {
             let storage = FeedStorage.shared
@@ -61,13 +57,13 @@ final class FeedManager: ObservableObject {
             // 记录刷新前的未读数
             let previousUnreadCount = try storage.fetchUnreadCount()
 
-            // 并发拉取所有源
+            // 并发拉取所有源（网络请求本身已经是异步的）
             let results = await FeedFetcher.shared.fetchMultiple(sources: sources)
 
             // 处理结果
             var sourcesWithNewArticles: [String] = []
             for (source, result) in results {
-                let hasNew = await processRefreshResult(source: source, result: result)
+                let hasNew = processRefreshResultSync(source: source, result: result)
                 if hasNew {
                     sourcesWithNewArticles.append(source.title)
                 }
@@ -86,6 +82,45 @@ final class FeedManager: ObservableObject {
 
         } catch {
             print("Failed to refresh all: \(error)")
+        }
+
+        isRefreshing = false
+        lastRefreshDate = Date()
+    }
+
+    /// 同步处理刷新结果（在 MainActor 上下文中调用）
+    /// - Returns: 是否有新文章
+    private func processRefreshResultSync(source: FeedSource, result: Result<FeedFetcher.FetchResult, Error>) -> Bool {
+        do {
+            var updatedSource = source
+            let storage = FeedStorage.shared
+
+            switch result {
+            case .success(let fetchResult):
+                switch fetchResult {
+                case .success(let data, let etag, let lastModified):
+                    let items = try FeedParserService.parse(data: data, sourceId: source.id)
+                    let newCount = try storage.saveItems(items, for: source.id)
+                    updatedSource.markSuccess(etag: etag, lastModified: lastModified)
+                    try storage.updateSource(updatedSource)
+                    return newCount > 0
+
+                case .notModified:
+                    updatedSource.markSuccess()
+                    try storage.updateSource(updatedSource)
+                    return false
+                }
+
+            case .failure(let error):
+                let errorMessage = (error as? FeedError)?.shortDescription ?? error.localizedDescription
+                updatedSource.markFailure(error: errorMessage)
+                try storage.updateSource(updatedSource)
+                return false
+            }
+
+        } catch {
+            print("Failed to process refresh result for \(source.title): \(error)")
+            return false
         }
     }
 
@@ -143,7 +178,7 @@ final class FeedManager: ObservableObject {
         }
     }
 
-    /// 处理刷新结果
+    /// 处理刷新结果（用于单源刷新）
     /// - Returns: 是否有新文章
     @discardableResult
     private func processRefreshResult(source: FeedSource, result: Result<FeedFetcher.FetchResult, Error>) async -> Bool {

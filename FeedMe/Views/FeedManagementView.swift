@@ -192,11 +192,11 @@ struct FeedManagementView: View {
         case .success(let urls):
             guard let url = urls.first else { return }
 
-            Task {
+            Task { @MainActor in
                 do {
                     // 获取文件访问权限
                     guard url.startAccessingSecurityScopedResource() else {
-                        importError = "无法访问文件"
+                        self.importError = "无法访问文件"
                         return
                     }
                     defer { url.stopAccessingSecurityScopedResource() }
@@ -209,15 +209,10 @@ struct FeedManagementView: View {
                         try? FeedStorage.shared.addSource(source)
                     }
 
-                    await MainActor.run {
-                        loadSources()
-                    }
-
+                    self.loadSources()
                     print("Imported \(importedSources.count) sources")
                 } catch {
-                    await MainActor.run {
-                        importError = error.localizedDescription
-                    }
+                    self.importError = error.localizedDescription
                 }
             }
 
@@ -241,9 +236,9 @@ struct FeedManagementView: View {
             try FeedStorage.shared.addSource(source)
             loadSources()
             // 添加后立即刷新获取文章
-            Task {
+            Task { @MainActor in
                 await FeedManager.shared.refresh(sourceId: source.id)
-                loadSources()
+                self.loadSources()
                 // 通知更新状态栏未读计数
                 NotificationCenter.default.post(name: .feedDataDidChange, object: nil)
             }
@@ -274,9 +269,9 @@ struct FeedManagementView: View {
     }
 
     private func refreshSource(_ source: FeedSource) {
-        Task {
+        Task { @MainActor in
             await FeedManager.shared.refresh(sourceId: source.id)
-            loadSources()
+            self.loadSources()
         }
     }
 
@@ -436,12 +431,12 @@ struct AddFeedSheet: View {
         isValidating = true
         errorMessage = nil
 
-        Task {
+        Task { @MainActor in
             do {
                 // 验证 URL
-                guard let url = URL(string: feedURL) else {
-                    errorMessage = "无效的 URL"
-                    isValidating = false
+                guard URL(string: feedURL) != nil else {
+                    self.errorMessage = "无效的 URL"
+                    self.isValidating = false
                     return
                 }
 
@@ -469,15 +464,15 @@ struct AddFeedSheet: View {
                         onAdd(source)
                         dismiss()
                     } else {
-                        errorMessage = "未找到 Feed"
+                        self.errorMessage = "未找到 Feed"
                     }
                 }
 
-                isValidating = false
+                self.isValidating = false
 
             } catch {
-                errorMessage = error.localizedDescription
-                isValidating = false
+                self.errorMessage = error.localizedDescription
+                self.isValidating = false
             }
         }
     }

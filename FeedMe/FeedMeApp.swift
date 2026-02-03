@@ -17,10 +17,6 @@ struct FeedMeApp: App {
         }
     }
 
-    init() {
-        // 应用启动时刷新一次
-        Task {
-            await FeedManager.shared.refreshOnLaunch()
-        }
-    }
+    // 注意：启动刷新已移至 AppDelegate.applicationDidFinishLaunching
+    // 避免双重触发导致重复请求
 }

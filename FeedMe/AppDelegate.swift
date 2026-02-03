@@ -181,9 +181,13 @@ extension AppDelegate: MenuBuilderDelegate {
             let items = try FeedStorage.shared.fetchItems()
             guard let item = items.first(where: { $0.id == itemId }) else { return }
 
-            // 打开浏览器
-            if let url = URL(string: item.link) {
+            // 安全校验：仅允许 http/https scheme
+            if let url = URL(string: item.link),
+               let scheme = url.scheme?.lowercased(),
+               scheme == "http" || scheme == "https" {
                 NSWorkspace.shared.open(url)
+            } else {
+                print("Blocked unsafe URL scheme: \(item.link)")
             }
 
             // 根据设置标记为已读
