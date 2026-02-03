@@ -8,9 +8,9 @@
 import Foundation
 
 /// Feed 网络请求服务
-final class FeedFetcher {
+final class FeedFetcher: Sendable {
     /// 请求结果
-    enum FetchResult {
+    enum FetchResult: Sendable {
         /// 成功获取新数据
         case success(data: Data, etag: String?, lastModified: String?)
 
@@ -18,8 +18,8 @@ final class FeedFetcher {
         case notModified
     }
 
-    /// 并发限制
-    private let semaphore = AsyncSemaphore(value: 5)
+    /// 并发限制（使用 DispatchSemaphore 避免 actor isolation 问题）
+    private let semaphore: DispatchSemaphore
 
     /// 超时时间（秒）
     private let timeout: TimeInterval = 15
@@ -30,7 +30,9 @@ final class FeedFetcher {
     /// 单例
     static let shared = FeedFetcher()
 
-    private init() {}
+    private init() {
+        self.semaphore = DispatchSemaphore(value: 5)
+    }
 
     /// 拉取 Feed 数据
     /// - Parameters:
@@ -43,7 +45,13 @@ final class FeedFetcher {
         etag: String? = nil,
         lastModified: String? = nil
     ) async throws -> FetchResult {
-        await semaphore.wait()
+        // 在后台线程等待信号量，避免阻塞主线程
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                self.semaphore.wait()
+                continuation.resume()
+            }
+        }
         defer { semaphore.signal() }
 
         guard let url = URL(string: url) else {
@@ -135,31 +143,3 @@ final class FeedFetcher {
     }
 }
 
-// MARK: - AsyncSemaphore
-
-/// 异步信号量（并发控制）
-private actor AsyncSemaphore {
-    private var value: Int
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    init(value: Int) {
-        self.value = value
-    }
-
-    func wait() async {
-        value -= 1
-        if value >= 0 { return }
-
-        await withCheckedContinuation { continuation in
-            waiters.append(continuation)
-        }
-    }
-
-    func signal() {
-        value += 1
-        if value <= 0, !waiters.isEmpty {
-            let waiter = waiters.removeFirst()
-            waiter.resume()
-        }
-    }
-}
