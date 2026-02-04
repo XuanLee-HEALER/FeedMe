@@ -26,6 +26,19 @@ A lightweight macOS menu bar RSS reader.
 
 ## Installation
 
+### Homebrew (Recommended)
+
+```bash
+brew tap XuanLee-HEALER/feedme
+brew install --cask feedme
+```
+
+To update:
+
+```bash
+brew upgrade --cask feedme
+```
+
 ### Download
 
 Download the latest release from [Releases](https://github.com/XuanLee-HEALER/FeedMe/releases).

@@ -7,6 +7,35 @@
 
 import Foundation
 
+/// 异步信号量，用于限制并发数量（纯 Swift Concurrency 实现，避免优先级反转）
+private actor AsyncSemaphore {
+    private var count: Int
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(value: Int) {
+        self.count = value
+    }
+
+    func wait() async {
+        if count > 0 {
+            count -= 1
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func signal() {
+        if !waiters.isEmpty {
+            let waiter = waiters.removeFirst()
+            waiter.resume()
+        } else {
+            count += 1
+        }
+    }
+}
+
 /// Feed 网络请求服务
 final class FeedFetcher: Sendable {
     /// 请求结果
@@ -18,8 +47,8 @@ final class FeedFetcher: Sendable {
         case notModified
     }
 
-    /// 并发限制（使用 DispatchSemaphore 避免 actor isolation 问题）
-    private let semaphore: DispatchSemaphore
+    /// 并发限制（使用 AsyncSemaphore 避免优先级反转问题）
+    private let semaphore = AsyncSemaphore(value: 5)
 
     /// 超时时间（秒）
     private let timeout: TimeInterval = 15
@@ -43,9 +72,7 @@ final class FeedFetcher: Sendable {
     /// 单例
     static let shared = FeedFetcher()
 
-    private init() {
-        self.semaphore = DispatchSemaphore(value: 5)
-    }
+    private init() {}
 
     /// 拉取 Feed 数据
     /// - Parameters:
@@ -58,14 +85,9 @@ final class FeedFetcher: Sendable {
         etag: String? = nil,
         lastModified: String? = nil
     ) async throws -> FetchResult {
-        // 在后台线程等待信号量，避免阻塞主线程
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global().async {
-                self.semaphore.wait()
-                continuation.resume()
-            }
-        }
-        defer { semaphore.signal() }
+        // 等待信号量（纯 async/await，无优先级反转）
+        await semaphore.wait()
+        defer { Task { await semaphore.signal() } }
 
         guard let url = URL(string: url) else {
             throw FeedError.invalidURL(url)
