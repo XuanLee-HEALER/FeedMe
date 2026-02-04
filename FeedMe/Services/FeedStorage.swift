@@ -263,3 +263,58 @@ extension FeedStorage {
         }
     }
 }
+
+
+// MARK: - v1.1 新增查询方法
+
+extension FeedStorage {
+    /// 按名称排序获取所有订阅源（本地化排序）
+    func fetchAllSourcesSortedByName() throws -> [FeedSource] {
+        try dbQueue.read { db in
+            try FeedSource
+                .order(FeedSource.Columns.title.collating(.localizedCaseInsensitiveCompare))
+                .fetchAll(db)
+        }
+    }
+
+    /// 按源分组获取未读文章（源按名称排序）
+    func fetchUnreadItemsGroupedBySource() throws -> [(source: FeedSource, items: [FeedItem])] {
+        try dbQueue.read { db in
+            // 1. 获取按名称排序的所有源
+            let sources = try FeedSource
+                .order(FeedSource.Columns.title.collating(.localizedCaseInsensitiveCompare))
+                .fetchAll(db)
+
+            // 2. 获取每个源的未读文章
+            var result: [(source: FeedSource, items: [FeedItem])] = []
+
+            for source in sources {
+                let items = try FeedItem
+                    .filter(FeedItem.Columns.sourceId == source.id)
+                    .filter(FeedItem.Columns.isRead == false)
+                    .order(
+                        (FeedItem.Columns.publishedAt == nil).asc,
+                        FeedItem.Columns.publishedAt.desc,
+                        FeedItem.Columns.firstSeenAt.desc
+                    )
+                    .fetchAll(db)
+
+                if !items.isEmpty {
+                    result.append((source: source, items: items))
+                }
+            }
+
+            return result
+        }
+    }
+
+    /// 获取文章关联的源名称
+    func fetchSourceName(for sourceId: String) throws -> String {
+        try dbQueue.read { db in
+            if let source = try FeedSource.fetchOne(db, key: sourceId) {
+                return source.title
+            }
+            return "未知来源"
+        }
+    }
+}

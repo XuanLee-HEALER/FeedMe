@@ -29,7 +29,7 @@ final class AppSettings: ObservableObject {
     }
 
     /// 列表显示条数
-    @AppStorage("displayCount") var displayCount: Int = 5
+    @AppStorage("displayCount") var displayCount: Int = 7
 
     /// 开机自动启动
     @AppStorage("launchAtLogin") var launchAtLogin: Bool = false

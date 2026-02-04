@@ -19,17 +19,10 @@ struct FeedManagementView: View {
     @State private var sources: [FeedSource] = []
     @State private var showingAddSheet = false
     @State private var selectedSources: Set<FeedSource.ID> = []  // 支持多选
-    @State private var editingSource: FeedSource?
     @State private var showingImportPicker = false
     @State private var showingExportPicker = false
     @State private var importError: String?
     @State private var searchText = ""
-
-    /// 当前选中的第一个源（用于详情面板）
-    private var selectedSource: FeedSource? {
-        guard let firstId = selectedSources.first else { return nil }
-        return sources.first { $0.id == firstId }
-    }
 
     /// 过滤后的订阅源列表
     private var filteredSources: [FeedSource] {
@@ -69,19 +62,12 @@ struct FeedManagementView: View {
                             FeedSourceRow(source: source)
                                 .tag(source.id)
                                 .contextMenu {
-                                    Button("刷新") {
-                                        refreshSource(source)
-                                    }
-                                    Button("编辑…") {
-                                        editingSource = source
-                                    }
-                                    Divider()
                                     Button("删除", role: .destructive) {
                                         deleteSource(source)
                                     }
                                 }
                                 .accessibilityLabel("\(source.title)，\(source.isEnabled ? "已启用" : "已禁用")\(source.lastError != nil ? "，有错误" : "")")
-                                .accessibilityHint("双击打开详情，右键显示更多选项")
+                                .accessibilityHint("双击打开详情，右键删除")
                         }
                         .onDelete { indexSet in
                             for index in indexSet {
@@ -134,8 +120,13 @@ struct FeedManagementView: View {
                 }
             }
         } detail: {
-            if let source = selectedSource {
-                FeedSourceDetailView(source: source)
+            if let sourceIndex = sources.firstIndex(where: { selectedSources.contains($0.id) }) {
+                FeedSourceDetailView(
+                    source: $sources[sourceIndex],
+                    onSave: { updatedSource in
+                        updateSource(updatedSource)
+                    }
+                )
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: "sidebar.right")
@@ -150,11 +141,6 @@ struct FeedManagementView: View {
         .sheet(isPresented: $showingAddSheet) {
             AddFeedSheet { newSource in
                 addSource(newSource)
-            }
-        }
-        .sheet(item: $editingSource) { source in
-            EditFeedSheet(source: source) { updatedSource in
-                updateSource(updatedSource)
             }
         }
         .fileImporter(
@@ -268,13 +254,6 @@ struct FeedManagementView: View {
         }
     }
 
-    private func refreshSource(_ source: FeedSource) {
-        Task { @MainActor in
-            await FeedManager.shared.refresh(sourceId: source.id)
-            self.loadSources()
-        }
-    }
-
     private func updateSource(_ source: FeedSource) {
         do {
             try FeedStorage.shared.updateSource(source)
@@ -344,23 +323,60 @@ struct FeedSourceRow: View {
     }
 }
 
-// MARK: - FeedSourceDetailView
+// MARK: - FeedSourceDetailView (可编辑)
 
 struct FeedSourceDetailView: View {
-    let source: FeedSource
+    @Binding var source: FeedSource
+    let onSave: (FeedSource) -> Void
+
+    // 本地编辑状态
+    @State private var editedTitle: String = ""
+    @State private var editedFeedURL: String = ""
+    @State private var editedIsEnabled: Bool = true
+    @State private var editedRefreshInterval: Int = 0
+
+    // 自动保存任务
+    @State private var saveTask: Task<Void, Never>?
 
     var body: some View {
         Form {
             Section("基本信息") {
-                LabeledContent("标题", value: source.title)
-                LabeledContent("Feed URL", value: source.feedURL)
-                if let siteURL = source.siteURL {
+                TextField("名称", text: $editedTitle)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: editedTitle) {
+                        scheduleSave()
+                    }
+
+                TextField("Feed URL", text: $editedFeedURL)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: editedFeedURL) {
+                        scheduleSave()
+                    }
+
+                if let siteURL = source.siteURL, !siteURL.isEmpty {
                     LabeledContent("网站", value: siteURL)
                 }
             }
 
+            Section("设置") {
+                Toggle("启用", isOn: $editedIsEnabled)
+                    .onChange(of: editedIsEnabled) {
+                        saveImmediately()
+                    }
+
+                Picker("刷新间隔", selection: $editedRefreshInterval) {
+                    Text("使用全局设置").tag(0)
+                    Text("5 分钟").tag(5)
+                    Text("15 分钟").tag(15)
+                    Text("30 分钟").tag(30)
+                    Text("60 分钟").tag(60)
+                }
+                .onChange(of: editedRefreshInterval) {
+                    saveImmediately()
+                }
+            }
+
             Section("状态") {
-                LabeledContent("启用", value: source.isEnabled ? "是" : "否")
                 if let lastFetched = source.lastFetchedAt {
                     LabeledContent("最后刷新", value: lastFetched.formatted())
                 }
@@ -370,15 +386,61 @@ struct FeedSourceDetailView: View {
                             .foregroundStyle(.red)
                     }
                 }
-            }
-
-            Section("设置") {
-                LabeledContent("刷新间隔") {
-                    Text(source.refreshIntervalMinutes > 0 ? "\(source.refreshIntervalMinutes) 分钟" : "使用全局设置")
+                if source.consecutiveFailures > 0 {
+                    LabeledContent("连续失败次数", value: "\(source.consecutiveFailures)")
                 }
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            syncFromSource()
+        }
+        .onChange(of: source.id) {
+            syncFromSource()
+        }
+    }
+
+    /// 从 source 同步到本地编辑状态
+    private func syncFromSource() {
+        editedTitle = source.title
+        editedFeedURL = source.feedURL
+        editedIsEnabled = source.isEnabled
+        editedRefreshInterval = source.refreshIntervalMinutes
+    }
+
+    /// 延迟保存（用于 TextField，防止频繁保存）
+    private func scheduleSave() {
+        saveTask?.cancel()
+        saveTask = Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5s
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                performSave()
+            }
+        }
+    }
+
+    /// 立即保存（用于 Toggle/Picker）
+    private func saveImmediately() {
+        saveTask?.cancel()
+        performSave()
+    }
+
+    /// 执行保存
+    private func performSave() {
+        var updatedSource = source
+        updatedSource.title = editedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        updatedSource.feedURL = editedFeedURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        updatedSource.isEnabled = editedIsEnabled
+        updatedSource.refreshIntervalMinutes = editedRefreshInterval
+
+        // 验证数据有效性
+        guard !updatedSource.title.isEmpty, !updatedSource.feedURL.isEmpty else {
+            return
+        }
+
+        source = updatedSource
+        onSave(updatedSource)
     }
 }
 
@@ -475,95 +537,6 @@ struct AddFeedSheet: View {
                 self.isValidating = false
             }
         }
-    }
-}
-
-// MARK: - EditFeedSheet
-
-struct EditFeedSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var title: String
-    @State private var isEnabled: Bool
-    @State private var refreshInterval: Int
-
-    let source: FeedSource
-    let onSave: (FeedSource) -> Void
-
-    init(source: FeedSource, onSave: @escaping (FeedSource) -> Void) {
-        self.source = source
-        self.onSave = onSave
-        _title = State(initialValue: source.title)
-        _isEnabled = State(initialValue: source.isEnabled)
-        _refreshInterval = State(initialValue: source.refreshIntervalMinutes)
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("基本信息") {
-                    TextField("名称", text: $title)
-                        .textFieldStyle(.roundedBorder)
-
-                    LabeledContent("Feed URL") {
-                        Text(source.feedURL)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                }
-
-                Section("设置") {
-                    Toggle("启用", isOn: $isEnabled)
-
-                    Picker("刷新间隔", selection: $refreshInterval) {
-                        Text("使用全局设置").tag(0)
-                        Text("5 分钟").tag(5)
-                        Text("15 分钟").tag(15)
-                        Text("30 分钟").tag(30)
-                        Text("60 分钟").tag(60)
-                    }
-                }
-
-                if let lastFetched = source.lastFetchedAt {
-                    Section("状态") {
-                        LabeledContent("最后刷新", value: lastFetched.formatted())
-
-                        if let error = source.lastError {
-                            LabeledContent("最近错误") {
-                                Text(error)
-                                    .foregroundStyle(.red)
-                            }
-                        }
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            .navigationTitle("编辑订阅源")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        saveChanges()
-                    }
-                    .disabled(title.isEmpty)
-                }
-            }
-        }
-        .frame(width: 400, height: 320)
-    }
-
-    private func saveChanges() {
-        var updatedSource = source
-        updatedSource.title = title
-        updatedSource.isEnabled = isEnabled
-        updatedSource.refreshIntervalMinutes = refreshInterval
-        onSave(updatedSource)
-        dismiss()
     }
 }
 

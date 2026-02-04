@@ -200,11 +200,57 @@ extension AppDelegate: MenuBuilderDelegate {
         }
     }
 
+    @objc func openArticleByIdAndLink(_ itemId: String, link: String) {
+        // 安全校验：仅允许 http/https scheme
+        if let url = URL(string: link),
+           let scheme = url.scheme?.lowercased(),
+           scheme == "http" || scheme == "https" {
+            NSWorkspace.shared.open(url)
+        } else {
+            print("Blocked unsafe URL scheme: \(link)")
+        }
+
+        // 根据设置标记为已读
+        if AppSettings.shared.markAsReadOnClick {
+            do {
+                try FeedStorage.shared.markAsRead(itemId: itemId)
+                updateUnreadBadge()
+            } catch {
+                print("Failed to mark as read: \(error)")
+            }
+        }
+    }
+
+    @objc func markAsReadById(_ itemId: String) {
+        do {
+            try FeedStorage.shared.markAsRead(itemId: itemId)
+            updateUnreadBadge()
+            // 发送通知以便其他地方可以响应
+            NotificationCenter.default.post(name: .feedDataDidChange, object: nil)
+        } catch {
+            print("Failed to mark as read: \(error)")
+        }
+    }
+
     @objc func refreshAll() {
         startRefreshAnimation()
 
         Task {
             await FeedManager.shared.refreshAll()
+            await MainActor.run {
+                stopRefreshAnimation()
+                updateUnreadBadge()
+            }
+        }
+    }
+
+    @objc func refreshSource(_ sender: NSMenuItem) {
+        guard let sourceId = sender.representedObject as? String else { return }
+
+        startRefreshAnimation()
+
+        Task {
+            await FeedManager.shared.refresh(sourceId: sourceId)
             await MainActor.run {
                 stopRefreshAnimation()
                 updateUnreadBadge()
