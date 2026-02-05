@@ -7,20 +7,95 @@ macOS 菜单栏 RSS 阅读器应用。
 - SwiftUI + AppKit
 - macOS 13+
 
+## 快速开始
+
+### 依赖安装
+
+```bash
+# 安装 just（任务执行器）
+brew install just
+
+# 安装发布工具（仅发布时需要）
+brew install create-dmg gh
+```
+
+### 首次运行
+
+```bash
+# 检查依赖
+just check-deps
+
+# 编译并运行
+just build
+open ~/Library/Developer/Xcode/DerivedData/FeedMe-*/Build/Products/Debug/FeedMe.app
+
+# 或者直接安装到 /Applications
+just install
+```
+
+## 依赖
+
+### Swift Package Manager
+
+- [FeedKit](https://github.com/nmdias/FeedKit) - RSS/Atom 解析
+- [GRDB.swift](https://github.com/groue/GRDB.swift) - SQLite 数据库
+
+### 开发工具
+
+- `just` - 任务执行器
+- `create-dmg` - DMG 打包（发布时）
+- `gh` - GitHub CLI（发布时）
+- `swiftlint` - 代码检查（可选）
+- `swiftformat` - 代码格式化（可选）
+
 ## 架构
-- `AppDelegate`: 管理菜单栏状态和交互，处理左键（文章列表）和右键（设置菜单）点击
+
+### 应用入口
 - `FeedMeApp`: SwiftUI App 入口，提供设置窗口
+- `AppDelegate`: 管理菜单栏状态和交互，处理左键（文章列表）和右键（设置菜单）点击
 - `ContentView`: SwiftUI 设置界面
+
+### 核心层级
+- **Services/** - 业务逻辑层
+  - `FeedFetcher`: HTTP 请求和 ETag 缓存
+  - `FeedParser`: RSS/Atom 解析（使用 FeedKit）
+  - `FeedStorage`: GRDB 数据库操作
+  - `OPMLService`: OPML 导入/导出
+  - `NotificationService`: 通知管理
+- **Managers/** - 状态管理
+  - `FeedManager`: 全局订阅源和文章管理，协调刷新
+- **Models/** - 数据模型
+  - `FeedSource`, `FeedItem`, `AppSettings`, `FeedError`
+- **Views/** - UI 组件
+  - `MenuBuilder`: 构建状态栏菜单
+  - `ArticleMenuItemView`: 自定义两行文章视图
+  - `FeedManagementView`: 订阅源管理界面
 
 ## 项目结构
 ```
 FeedMe/
-├── FeedMe/                 # 主应用代码
-│   ├── FeedMeApp.swift    # App 入口
-│   ├── AppDelegate.swift  # 菜单栏逻辑
-│   └── ContentView.swift  # 设置视图
-├── FeedMeTests/           # 单元测试
-└── FeedMeUITests/         # UI 测试
+├── FeedMe/
+│   ├── FeedMeApp.swift        # App 入口
+│   ├── AppDelegate.swift      # 菜单栏逻辑
+│   ├── ContentView.swift      # 设置视图
+│   ├── Managers/
+│   │   └── FeedManager.swift  # 全局状态管理
+│   ├── Services/              # 业务逻辑
+│   │   ├── FeedFetcher.swift
+│   │   ├── FeedParser.swift
+│   │   ├── FeedStorage.swift
+│   │   ├── OPMLService.swift
+│   │   └── NotificationService.swift
+│   ├── Models/                # 数据模型
+│   ├── Views/                 # UI 组件
+│   │   ├── MenuBuilder.swift
+│   │   ├── ArticleMenuItemView.swift
+│   │   └── FeedManagementView.swift
+│   └── Utils/
+├── FeedMeTests/               # 单元测试
+├── FeedMeUITests/             # UI 测试
+├── justfile                   # Just 任务定义
+└── DEVELOPMENT.md             # 详细开发文档
 ```
 
 ## 任务执行规范 ⚠️ 重要
@@ -187,6 +262,19 @@ ToolbarItem(placement: .primaryAction) {
     Menu { ... } label: { Label("更多", systemImage: "ellipsis.circle") }
 }
 ```
+
+### 动态菜单更新
+右键标记已读后保持菜单打开的关键实现：
+
+**关键点**：
+- `ArticleMenuItemView.rightMouseDown`: 不调用 `menu.cancelTracking()`，让菜单保持打开
+- `MenuBuilder.updateMenuAfterMarkingRead`: 动态移除已读项并补充新文章
+- 使用 `menu.removeItem(at:)` 和 `menu.insertItem(_:at:)` 实时更新菜单
+- 保持对 `currentArticleMenu` 的弱引用以支持动态更新
+
+**参考文件**：
+- `FeedMe/Views/ArticleMenuItemView.swift:199` - 右键事件处理
+- `FeedMe/Views/MenuBuilder.swift:283` - 动态更新逻辑
 
 ## Bug 解决经验
 
