@@ -23,7 +23,100 @@ FeedMe/
 └── FeedMeUITests/         # UI 测试
 ```
 
+## 任务执行规范 ⚠️ 重要
+
+**本项目使用 `just` 作为统一任务执行器。**
+
+### 核心原则
+
+1. **优先使用 just recipe**
+   - 任何任务执行前，先检查 `justfile` 是否有对应的 recipe
+   - 运行 `just --list` 查看所有可用命令
+   - 使用 just recipe 而不是直接运行原始命令
+
+2. **高频任务必须写 recipe**
+   - 如果某个命令需要频繁执行（超过 2 次）
+   - 先在 `justfile` 中添加 recipe
+   - 再执行任务
+   - 这样保证团队一致性和可维护性
+
+3. **Recipe 命名规范**
+   - 使用小写字母和连字符：`build-release`、`clean-artifacts`
+   - 动词开头：`update-version`、`check-deps`
+   - 简洁明了，见名知义
+
+### 示例
+
+❌ **错误做法**：直接运行原始命令
+```bash
+xcodebuild -project FeedMe.xcodeproj -scheme FeedMe -configuration Release clean build
+```
+
+✅ **正确做法**：使用 just recipe
+```bash
+just build-release
+```
+
+❌ **错误做法**：重复执行相同命令
+```bash
+# 第一次
+xcodebuild test -project FeedMe.xcodeproj -scheme FeedMe
+
+# 第二次还是手动输入
+xcodebuild test -project FeedMe.xcodeproj -scheme FeedMe
+```
+
+✅ **正确做法**：发现高频任务后，立即创建 recipe
+```bash
+# 在 justfile 中添加
+test:
+    xcodebuild test -project FeedMe.xcodeproj -scheme FeedMe
+
+# 以后都使用
+just test
+```
+
 ## 开发命令
+
+### 常用 Just Recipes
+
+```bash
+# 查看所有可用命令
+just --list
+
+# 构建
+just build              # Debug 版本
+just build-release      # Release 版本
+
+# 测试
+just test               # 运行测试
+
+# 代码质量
+just lint               # 代码检查
+just format             # 代码格式化
+
+# 安装
+just install            # 本地安装到 /Applications
+
+# 版本管理
+just version            # 查看当前版本
+just update-version 1.3.0  # 更新版本号
+
+# 发布
+just dmg 1.3.0          # 创建 DMG
+just clean-artifacts    # 清理产物
+
+# 工具
+just check-deps         # 检查依赖
+just dev                # 打开 Xcode
+```
+
+详见 [DEVELOPMENT.md](./DEVELOPMENT.md) 获取完整说明。
+
+### 原始命令（仅供参考）
+
+如果 just recipe 不满足需求，可以使用原始命令：
+
 ```bash
 # 构建
 xcodebuild -project FeedMe.xcodeproj -scheme FeedMe build
