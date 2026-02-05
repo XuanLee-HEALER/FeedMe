@@ -197,10 +197,7 @@ final class ArticleMenuItemView: NSView {
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        // 右键点击：先关闭菜单，再触发标记已读
-        let menu = enclosingMenuItem?.menu
-        menu?.cancelTracking()
-
+        // 右键点击：触发标记已读，菜单保持打开
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.onMarkAsRead?(self.itemId)

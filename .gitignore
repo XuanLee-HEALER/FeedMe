@@ -39,3 +39,9 @@ Carthage/Checkouts/
 *.dSYM.zip
 *.dSYM
 *.zip
+
+# Release artifacts
+*.dmg
+dmg_temp/
+.release-notes.md
+*.log

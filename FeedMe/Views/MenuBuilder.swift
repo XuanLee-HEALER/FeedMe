@@ -14,11 +14,17 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
     /// 当前高亮的菜单项（用于清除旧高亮）
     private weak var currentHighlightedItem: NSMenuItem?
 
+    /// 当前打开的文章列表菜单（用于动态更新）
+    private weak var currentArticleMenu: NSMenu?
+
     /// 构建左键菜单（文章列表）
     func buildArticleListMenu() -> NSMenu {
         let menu = NSMenu()
         menu.delegate = self  // 设置菜单代理以接收高亮变化
         menu.autoenablesItems = false  // 防止没有 action 的菜单项被自动禁用
+
+        // 保存菜单引用，用于动态更新
+        currentArticleMenu = menu
 
         do {
             let storage = FeedStorage.shared
@@ -239,7 +245,11 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
         }
 
         customView.onMarkAsRead = { [weak self] itemId in
+            // 先标记已读
             self?.delegate?.markAsReadById(itemId)
+
+            // 然后动态更新菜单
+            self?.updateMenuAfterMarkingRead(itemId: itemId, menuItem: menuItem)
         }
 
         menuItem.view = customView
@@ -273,6 +283,85 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
         formatter.unitsStyle = .abbreviated
         return formatter
     }()
+
+    // MARK: - Dynamic Menu Update
+
+    /// 标记已读后动态更新菜单
+    /// - Parameters:
+    ///   - itemId: 被标记已读的文章 ID
+    ///   - menuItem: 对应的菜单项
+    func updateMenuAfterMarkingRead(itemId: String, menuItem: NSMenuItem) {
+        guard let menu = currentArticleMenu else { return }
+
+        do {
+            let storage = FeedStorage.shared
+            let settings = AppSettings.shared
+
+            // 获取最新的未读文章列表
+            let allUnread = try storage.fetchItems(unreadOnly: true)
+            let sortedUnread = allUnread.sorted { $0.displayDate > $1.displayDate }
+
+            // 找到被标记的菜单项的索引
+            guard let itemIndex = menu.items.firstIndex(of: menuItem) else { return }
+
+            // 移除已标记的菜单项
+            menu.removeItem(at: itemIndex)
+
+            // 检查是否需要补充新文章
+            let displayCount = settings.displayCount
+
+            // 计算当前主列表中有多少文章（排除标题、分隔符等）
+            var currentArticleCount = 0
+            for item in menu.items {
+                if item.view is ArticleMenuItemView {
+                    currentArticleCount += 1
+                }
+            }
+
+            // 如果文章数少于 displayCount，且还有未读文章，则补充
+            if currentArticleCount < displayCount, currentArticleCount < sortedUnread.count {
+                let nextItem = sortedUnread[currentArticleCount]
+
+                // 获取源名称
+                let sources = try storage.fetchAllSources()
+                let sourceName = sources.first(where: { $0.id == nextItem.sourceId })?.title ?? "未知来源"
+
+                // 创建新菜单项
+                let newMenuItem = createTwoLineArticleMenuItem(nextItem, sourceName: sourceName)
+
+                // 插入到正确的位置（在 itemIndex 处）
+                menu.insertItem(newMenuItem, at: itemIndex)
+            }
+
+            // 如果主列表已空，显示"全部已读"
+            if currentArticleCount == 0 && sortedUnread.isEmpty {
+                // 找到"最近更新"标题后的分隔符
+                if let separatorIndex = menu.items.firstIndex(where: { $0.isSeparatorItem && $0.title.isEmpty }),
+                   separatorIndex > 0 {
+                    let allReadItem = NSMenuItem(title: "✓ 全部已读", action: nil, keyEquivalent: "")
+                    allReadItem.isEnabled = false
+                    menu.insertItem(allReadItem, at: separatorIndex + 1)
+                }
+            }
+
+            // 更新"更多"菜单的计数
+            if let moreItemIndex = menu.items.firstIndex(where: { $0.title.hasPrefix("… 更多") }) {
+                let remainingCount = sortedUnread.count - currentArticleCount
+                if remainingCount > 0 {
+                    menu.items[moreItemIndex].title = "… 更多 (\(remainingCount))"
+                } else {
+                    // 没有更多文章了，移除"更多"菜单
+                    if moreItemIndex > 0, menu.items[moreItemIndex - 1].isSeparatorItem {
+                        menu.removeItem(at: moreItemIndex - 1)  // 移除分隔符
+                    }
+                    menu.removeItem(at: moreItemIndex)
+                }
+            }
+
+        } catch {
+            print("Failed to update menu after marking read: \(error)")
+        }
+    }
 
     // MARK: - NSMenuDelegate
 
