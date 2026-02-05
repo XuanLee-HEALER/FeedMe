@@ -71,12 +71,32 @@ final class ArticleMenuItemView: NSView {
     private static let horizontalPadding: CGFloat = 12
     private static let verticalPadding: CGFloat = 6
     private static let unreadDotSize: CGFloat = 6
+    private static let tooltipLineLength = 40
 
     private static let timeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter
     }()
+
+    /// 格式化 tooltip，超过指定长度自动换行
+    private static func formatTooltip(_ text: String) -> String {
+        guard text.count > tooltipLineLength else { return text }
+
+        var result = ""
+        var currentLineLength = 0
+
+        for char in text {
+            if currentLineLength >= tooltipLineLength {
+                result.append("\n")
+                currentLineLength = 0
+            }
+            result.append(char)
+            currentLineLength += 1
+        }
+
+        return result
+    }
 
     init(item: FeedItem, sourceName: String) {
         self.itemId = item.id
@@ -90,6 +110,9 @@ final class ArticleMenuItemView: NSView {
 
         setupViews()
         updateContent()
+
+        // 设置悬浮提示显示完整标题
+        self.toolTip = Self.formatTooltip(articleTitle)
     }
 
     @available(*, unavailable)

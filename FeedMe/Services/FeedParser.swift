@@ -23,26 +23,43 @@ final class FeedParserService {
         // 先检测 Feed 类型（FeedKit 的检测只看前 128 字节，可能漏掉）
         let feedType = detectFeedType(data: data)
 
+        print("📝 FeedParser: 检测到 Feed 类型 = \(feedType), 数据大小 = \(data.count) 字节")
+
         do {
             switch feedType {
             case .rss:
+                print("📝 FeedParser: 尝试解析 RSS...")
                 let rssFeed = try RSSFeed(data: data)
-                return parseRSS(rssFeed, sourceId: sourceId)
+                let items = parseRSS(rssFeed, sourceId: sourceId)
+                print("📝 FeedParser: RSS 解析成功，得到 \(items.count) 个条目")
+                return items
 
             case .atom:
+                print("📝 FeedParser: 尝试解析 Atom...")
                 let atomFeed = try AtomFeed(data: data)
-                return parseAtom(atomFeed, sourceId: sourceId)
+                let items = parseAtom(atomFeed, sourceId: sourceId)
+                print("📝 FeedParser: Atom 解析成功，得到 \(items.count) 个条目")
+                return items
 
             case .json:
+                print("📝 FeedParser: 尝试解析 JSON Feed...")
                 let jsonFeed = try JSONFeed(data: data)
-                return parseJSON(jsonFeed, sourceId: sourceId)
+                let items = parseJSON(jsonFeed, sourceId: sourceId)
+                print("📝 FeedParser: JSON Feed 解析成功，得到 \(items.count) 个条目")
+                return items
 
             case .unknown:
+                // 打印前 200 字节帮助诊断
+                let preview = String(decoding: data.prefix(200), as: UTF8.self)
+                print("❌ FeedParser: 无法识别的格式，数据预览: \(preview)")
                 throw AppFeedError.parseError("无法识别的 Feed 格式")
             }
         } catch let error as AppFeedError {
+            print("❌ FeedParser: AppFeedError - \(error.localizedDescription)")
             throw error
         } catch {
+            print("❌ FeedParser: 解析错误 - \(error)")
+            print("❌ FeedParser: 错误类型 - \(type(of: error))")
             throw AppFeedError.parseError(error.localizedDescription)
         }
     }

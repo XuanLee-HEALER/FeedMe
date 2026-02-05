@@ -39,26 +39,29 @@ struct FeedManagementView: View {
         NavigationSplitView {
             Group {
                 if sources.isEmpty {
-                    // 空状态
-                    VStack(spacing: 16) {
-                        Image(systemName: "newspaper")
-                            .font(.system(size: 48))
-                            .foregroundStyle(.secondary)
-                        Text("还没有订阅任何 Feed")
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
-                        Button("添加订阅源") {
-                            showingAddSheet = true
+                    // 空状态 - 使用 Spacer 替代 frame 以避免约束冲突
+                    VStack {
+                        Spacer()
+                        VStack(spacing: 16) {
+                            Image(systemName: "newspaper")
+                                .font(.system(size: 48))
+                                .foregroundStyle(.secondary)
+                            Text("还没有订阅任何 Feed")
+                                .font(.headline)
+                                .foregroundStyle(.secondary)
+                            Button("添加订阅源") {
+                                showingAddSheet = true
+                            }
+                            .buttonStyle(.borderedProminent)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("空列表，还没有订阅任何 Feed")
+                        .accessibilityHint("点击添加订阅源按钮开始")
+                        Spacer()
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("空列表，还没有订阅任何 Feed")
-                    .accessibilityHint("点击添加订阅源按钮开始")
                 } else {
                     List(selection: $selectedSources) {
-                        ForEach(filteredSources) { source in
+                        ForEach(searchText.isEmpty ? sources : filteredSources) { source in
                             FeedSourceRow(source: source)
                                 .tag(source.id)
                                 .contextMenu {
@@ -70,27 +73,42 @@ struct FeedManagementView: View {
                                 .accessibilityHint("双击打开详情，右键删除")
                         }
                         .onDelete { indexSet in
+                            let sourcesToDelete = searchText.isEmpty ? sources : filteredSources
                             for index in indexSet {
-                                deleteSource(filteredSources[index])
+                                deleteSource(sourcesToDelete[index])
+                            }
+                        }
+                        .onMove { from, to in
+                            // 只在未过滤时允许拖拽排序
+                            if searchText.isEmpty {
+                                moveSources(from: from, to: to)
                             }
                         }
                     }
-                    .clipped()
+                    .listStyle(.sidebar)
                 }
             }
-            .clipped()
-            .navigationTitle("订阅源")
             .searchable(text: $searchText, prompt: "搜索订阅源")
             .toolbar {
-                ToolbarItemGroup(placement: .primaryAction) {
+                ToolbarItem(placement: .principal) {
+                    Text("订阅源")
+                        .font(.headline)
+                }
+
+                // 添加按钮 - 独立的工具栏项
+                ToolbarItem(placement: .primaryAction) {
                     Button {
                         showingAddSheet = true
                     } label: {
-                        Image(systemName: "plus")
+                        Label("添加", systemImage: "plus")
                     }
+                    .labelStyle(.iconOnly)
                     .accessibilityLabel("添加订阅源")
                     .keyboardShortcut("n", modifiers: .command)
+                }
 
+                // 更多菜单 - 独立的工具栏项
+                ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button("导入 OPML…") {
                             showingImportPicker = true
@@ -103,12 +121,14 @@ struct FeedManagementView: View {
                         .disabled(sources.isEmpty)
                         .keyboardShortcut("e", modifiers: .command)
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Label("更多", systemImage: "ellipsis.circle")
                     }
+                    .labelStyle(.iconOnly)
                     .accessibilityLabel("更多操作")
                 }
 
-                ToolbarItem(placement: .destructiveAction) {
+                // 删除按钮 - 单独的位置
+                ToolbarItem(placement: .automatic) {
                     Button {
                         deleteSelectedSources()
                     } label: {
@@ -120,24 +140,33 @@ struct FeedManagementView: View {
                 }
             }
         } detail: {
-            if let sourceIndex = sources.firstIndex(where: { selectedSources.contains($0.id) }) {
-                FeedSourceDetailView(
-                    source: $sources[sourceIndex],
-                    onSave: { updatedSource in
-                        updateSource(updatedSource)
+            Group {
+                if let sourceIndex = sources.firstIndex(where: { selectedSources.contains($0.id) }) {
+                    FeedSourceDetailView(
+                        source: $sources[sourceIndex],
+                        onSave: { updatedSource in
+                            updateSource(updatedSource)
+                        }
+                    )
+                } else {
+                    VStack(spacing: 8) {
+                        Image(systemName: "sidebar.right")
+                            .font(.system(size: 32))
+                            .foregroundStyle(.tertiary)
+                        Text("选择一个订阅源查看详情")
+                            .foregroundStyle(.secondary)
                     }
-                )
-            } else {
-                VStack(spacing: 8) {
-                    Image(systemName: "sidebar.right")
-                        .font(.system(size: 32))
-                        .foregroundStyle(.tertiary)
-                    Text("选择一个订阅源查看详情")
-                        .foregroundStyle(.secondary)
+                    .accessibilityLabel("未选择订阅源")
                 }
-                .accessibilityLabel("未选择订阅源")
+            }
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("订阅源管理")
+                        .font(.headline)
+                }
             }
         }
+        .navigationSplitViewColumnWidth(min: 280, ideal: 350, max: 500)
         .sheet(isPresented: $showingAddSheet) {
             AddFeedSheet { newSource in
                 addSource(newSource)
@@ -262,6 +291,18 @@ struct FeedManagementView: View {
             print("Failed to update source: \(error)")
         }
     }
+
+    private func moveSources(from: IndexSet, to: Int) {
+        // 重新排列 sources 数组
+        sources.move(fromOffsets: from, toOffset: to)
+
+        // 保存新顺序到数据库
+        do {
+            try FeedStorage.shared.updateSourcesOrder(sources)
+        } catch {
+            print("Failed to update sources order: \(error)")
+        }
+    }
 }
 
 // MARK: - FeedSourceRow
@@ -380,13 +421,33 @@ struct FeedSourceDetailView: View {
                 if let lastFetched = source.lastFetchedAt {
                     LabeledContent("最后刷新", value: lastFetched.formatted())
                 }
+                
+                // 错误详情（折叠展示）
                 if let error = source.lastError {
-                    LabeledContent("错误") {
-                        Text(error)
-                            .foregroundStyle(.red)
+                    DisclosureGroup {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(error)
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundStyle(.red)
+                                .textSelection(.enabled)
+                            
+                            if source.consecutiveFailures > 0 {
+                                Divider()
+                                Text("连续失败 \(source.consecutiveFailures) 次")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    } label: {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                            Text("错误详情")
+                                .foregroundStyle(.red)
+                        }
                     }
-                }
-                if source.consecutiveFailures > 0 {
+                } else if source.consecutiveFailures > 0 {
                     LabeledContent("连续失败次数", value: "\(source.consecutiveFailures)")
                 }
             }

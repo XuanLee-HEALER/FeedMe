@@ -9,7 +9,7 @@ import Foundation
 import GRDB
 
 /// 订阅源模型
-struct FeedSource: Codable, Identifiable, Hashable, FetchableRecord, PersistableRecord {
+struct FeedSource: Codable, Identifiable, Hashable, FetchableRecord, PersistableRecord, Sendable {
     static let databaseTableName = "feedSources"
 
     /// 唯一标识符
@@ -29,6 +29,9 @@ struct FeedSource: Codable, Identifiable, Hashable, FetchableRecord, Persistable
 
     /// 刷新间隔（分钟），0 表示使用全局设置
     var refreshIntervalMinutes: Int
+
+    /// 显示顺序
+    var displayOrder: Int
 
     /// 最后拉取时间
     var lastFetchedAt: Date?
@@ -53,6 +56,7 @@ struct FeedSource: Codable, Identifiable, Hashable, FetchableRecord, Persistable
         feedURL: String,
         isEnabled: Bool = true,
         refreshIntervalMinutes: Int = 0,
+        displayOrder: Int = 0,
         lastFetchedAt: Date? = nil,
         etag: String? = nil,
         lastModified: String? = nil,
@@ -65,6 +69,7 @@ struct FeedSource: Codable, Identifiable, Hashable, FetchableRecord, Persistable
         self.feedURL = feedURL
         self.isEnabled = isEnabled
         self.refreshIntervalMinutes = refreshIntervalMinutes
+        self.displayOrder = displayOrder
         self.lastFetchedAt = lastFetchedAt
         self.etag = etag
         self.lastModified = lastModified
@@ -84,6 +89,7 @@ extension FeedSource {
         static let feedURL = Column("feedURL")
         static let isEnabled = Column("isEnabled")
         static let refreshIntervalMinutes = Column("refreshIntervalMinutes")
+        static let displayOrder = Column("displayOrder")
         static let lastFetchedAt = Column("lastFetchedAt")
         static let etag = Column("etag")
         static let lastModified = Column("lastModified")

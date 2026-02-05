@@ -51,8 +51,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
-        // 启动时刷新一次
+        // 启动时刷新一次（开发环境下禁用）
+        #if !DEBUG
         refreshAll()
+        #else
+        print("🔧 开发模式：跳过启动时自动刷新")
+        #endif
     }
 
     @objc private func handleFeedDataChange() {
@@ -274,8 +278,19 @@ extension AppDelegate: MenuBuilderDelegate {
 
             let window = NSWindow(contentViewController: hostingController)
             window.title = "订阅源管理"
-            window.setContentSize(NSSize(width: 600, height: 400))
-            window.styleMask = [.titled, .closable, .resizable]
+            window.setContentSize(NSSize(width: 1000, height: 700))
+
+            // 全高度侧边栏配置
+            window.styleMask = [.titled, .closable, .resizable, .fullSizeContentView]
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+
+            // 工具栏样式
+            window.toolbarStyle = .unified
+
+            // 设置最小窗口尺寸
+            window.minSize = NSSize(width: 800, height: 500)
+
             window.center()
 
             managementWindow = window

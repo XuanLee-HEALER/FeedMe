@@ -62,7 +62,9 @@ final class FeedFetcher: Sendable {
     /// 允许的内容类型
     private let allowedContentTypes = [
         "application/rss+xml",
+        "application/x-rss+xml",  // 非标准但常见的 RSS MIME 类型
         "application/atom+xml",
+        "application/x-atom+xml",  // 非标准但常见的 Atom MIME 类型
         "application/xml",
         "text/xml",
         "application/json",

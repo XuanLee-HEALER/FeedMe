@@ -10,7 +10,7 @@ import GRDB
 import CryptoKit
 
 /// Feed 文章条目模型
-struct FeedItem: Codable, Identifiable, FetchableRecord, PersistableRecord {
+struct FeedItem: Codable, Identifiable, FetchableRecord, PersistableRecord, Sendable {
     static let databaseTableName = "feedItems"
 
     /// 内部唯一标识符

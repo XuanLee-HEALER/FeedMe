@@ -54,7 +54,7 @@ final class FeedStorage {
         // v1: 初始表结构
         migrator.registerMigration("v1_initial") { db in
             // FeedSource 表
-            try db.create(table: FeedSource.databaseTableName) { t in
+            try db.create(table: "feedSources") { t in
                 t.column("id", .text).primaryKey()
                 t.column("title", .text).notNull()
                 t.column("siteURL", .text)
@@ -69,11 +69,11 @@ final class FeedStorage {
             }
 
             // FeedItem 表
-            try db.create(table: FeedItem.databaseTableName) { t in
+            try db.create(table: "feedItems") { t in
                 t.column("id", .text).primaryKey()
                 t.column("sourceId", .text).notNull()
                     .indexed()
-                    .references(FeedSource.databaseTableName, onDelete: .cascade)
+                    .references("feedSources", onDelete: .cascade)
                 t.column("guidOrId", .text)
                 t.column("link", .text).notNull()
                 t.column("title", .text).notNull()
@@ -88,8 +88,15 @@ final class FeedStorage {
             }
 
             // 索引
-            try db.create(index: "idx_feedItems_isRead", on: FeedItem.databaseTableName, columns: ["isRead"])
-            try db.create(index: "idx_feedItems_publishedAt", on: FeedItem.databaseTableName, columns: ["publishedAt"])
+            try db.create(index: "idx_feedItems_isRead", on: "feedItems", columns: ["isRead"])
+            try db.create(index: "idx_feedItems_publishedAt", on: "feedItems", columns: ["publishedAt"])
+        }
+
+        // v2: 添加显示顺序字段
+        migrator.registerMigration("v2_add_display_order") { db in
+            try db.alter(table: "feedSources") { t in
+                t.add(column: "displayOrder", .integer).notNull().defaults(to: 0)
+            }
         }
 
         return migrator
@@ -120,10 +127,22 @@ extension FeedStorage {
         }
     }
 
+    /// 批量更新订阅源的显示顺序
+    func updateSourcesOrder(_ sources: [FeedSource]) throws {
+        try dbQueue.write { db in
+            for (index, var source) in sources.enumerated() {
+                source.displayOrder = index
+                try source.update(db)
+            }
+        }
+    }
+
     /// 获取所有订阅源
     func fetchAllSources() throws -> [FeedSource] {
         try dbQueue.read { db in
-            try FeedSource.fetchAll(db)
+            try FeedSource
+                .order(FeedSource.Columns.displayOrder)
+                .fetchAll(db)
         }
     }
 

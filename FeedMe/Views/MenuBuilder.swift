@@ -110,7 +110,7 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
                 }
             }
 
-            // 底部操作 - 移除刷新按钮，只保留全部标为已读
+            // 底部操作
             menu.addItem(NSMenuItem.separator())
 
             if !sortedUnread.isEmpty {
@@ -118,6 +118,11 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
                 markAllReadItem.target = delegate
                 menu.addItem(markAllReadItem)
             }
+
+            // 刷新全部源
+            let refreshItem = NSMenuItem(title: "刷新全部源", action: #selector(MenuBuilderDelegate.refreshAll), keyEquivalent: "r")
+            refreshItem.target = delegate
+            menu.addItem(refreshItem)
 
         } catch {
             // 错误状态

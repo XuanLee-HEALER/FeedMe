@@ -27,7 +27,11 @@ final class FeedManager: ObservableObject {
     static let shared = FeedManager()
 
     private init() {
+        #if !DEBUG
         setupTimer()
+        #else
+        print("🔧 开发模式：跳过定时刷新设置")
+        #endif
     }
 
     /// 设置定时器
@@ -79,6 +83,9 @@ final class FeedManager: ObservableObject {
                     sourceNames: sourcesWithNewArticles
                 )
             }
+
+            // 发送数据变化通知，更新 UI（包括状态栏 badge）
+            NotificationCenter.default.post(name: .feedDataDidChange, object: nil)
 
         } catch {
             print("Failed to refresh all: \(error)")
@@ -166,11 +173,28 @@ final class FeedManager: ObservableObject {
                 }
 
             } catch {
-                // 刷新失败
+                // 刷新失败 - 打印详细错误信息
+                print("❌ ========== 刷新失败详情 ==========")
+                print("❌ 订阅源: \(source.title)")
+                print("❌ Feed URL: \(source.feedURL)")
+                print("❌ 错误类型: \(type(of: error))")
+                print("❌ 错误描述: \(error)")
+                print("❌ localizedDescription: \(error.localizedDescription)")
+
+                if let feedError = error as? FeedError {
+                    print("❌ FeedError.shortDescription: \(feedError.shortDescription)")
+                }
+
+                // 打印 NSError 信息（Error 桥接到 NSError）
+                let nsError = error as NSError
+                print("❌ NSError domain: \(nsError.domain)")
+                print("❌ NSError code: \(nsError.code)")
+                print("❌ NSError userInfo: \(nsError.userInfo)")
+                print("❌ =====================================")
+
                 let errorMessage = (error as? FeedError)?.shortDescription ?? error.localizedDescription
                 source.markFailure(error: errorMessage)
                 try? storage.updateSource(source)
-                print("❌ Failed to refresh \(source.title): \(errorMessage)")
             }
 
         } catch {
