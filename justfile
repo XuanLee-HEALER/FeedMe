@@ -11,8 +11,17 @@ xcodeproj := "FeedMe.xcodeproj"
 derived_data := env_var('HOME') + "/Library/Developer/Xcode/DerivedData"
 app_path := "/Applications/FeedMe.app"
 
-# 清理编译产物
+# 清理所有（编译产物 + artifacts）
 clean:
+    @echo "🧹 清理所有..."
+    @xcodebuild -project {{xcodeproj}} -scheme {{scheme}} clean
+    @rm -f *.dmg *.zip
+    @rm -rf dmg_temp
+    @rm -f *.log .release-notes.md
+    @echo "✅ 清理完成"
+
+# 仅清理编译产物
+clean-build:
     @echo "🧹 清理编译产物..."
     xcodebuild -project {{xcodeproj}} -scheme {{scheme}} clean
 
@@ -92,9 +101,9 @@ dmg version: build-release
 # 清理 artifacts（DMG 文件等）
 clean-artifacts:
     @echo "🧹 清理 artifacts..."
-    @rm -f FeedMe-*.dmg *.dmg
+    @rm -f *.dmg *.zip
     @rm -rf dmg_temp
-    @rm -f *.log
+    @rm -f *.log .release-notes.md
     @echo "✅ Artifacts 清理完成"
 
 # 更新版本号
