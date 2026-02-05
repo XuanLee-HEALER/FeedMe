@@ -5,8 +5,8 @@
 //  Created by Claude on 2026/2/3.
 //
 
-import Foundation
 import Combine
+import Foundation
 
 /// Feed 刷新管理器
 @MainActor
@@ -28,9 +28,9 @@ final class FeedManager: ObservableObject {
 
     private init() {
         #if !DEBUG
-        setupTimer()
+            setupTimer()
         #else
-        print("🔧 开发模式：跳过定时刷新设置")
+            print("🔧 开发模式：跳过定时刷新设置")
         #endif
     }
 
@@ -103,9 +103,9 @@ final class FeedManager: ObservableObject {
             let storage = FeedStorage.shared
 
             switch result {
-            case .success(let fetchResult):
+            case let .success(fetchResult):
                 switch fetchResult {
-                case .success(let data, let etag, let lastModified):
+                case let .success(data, etag, lastModified):
                     let items = try FeedParserService.parse(data: data, sourceId: source.id)
                     let (_, newItems) = try storage.saveItems(items, for: source.id)
                     updatedSource.markSuccess(etag: etag, lastModified: lastModified)
@@ -118,7 +118,7 @@ final class FeedManager: ObservableObject {
                     return []
                 }
 
-            case .failure(let error):
+            case let .failure(error):
                 let errorMessage = (error as? FeedError)?.shortDescription ?? error.localizedDescription
                 updatedSource.markFailure(error: errorMessage)
                 try storage.updateSource(updatedSource)
@@ -152,7 +152,7 @@ final class FeedManager: ObservableObject {
 
                 // 处理结果
                 switch fetchResult {
-                case .success(let data, let etag, let lastModified):
+                case let .success(data, etag, lastModified):
                     // 解析文章
                     let items = try FeedParserService.parse(data: data, sourceId: sourceId)
 
@@ -211,9 +211,9 @@ final class FeedManager: ObservableObject {
             let storage = FeedStorage.shared
 
             switch result {
-            case .success(let fetchResult):
+            case let .success(fetchResult):
                 switch fetchResult {
-                case .success(let data, let etag, let lastModified):
+                case let .success(data, etag, lastModified):
                     // 解析文章
                     let items = try FeedParserService.parse(data: data, sourceId: source.id)
 
@@ -233,7 +233,7 @@ final class FeedManager: ObservableObject {
                     return false
                 }
 
-            case .failure(let error):
+            case let .failure(error):
                 // 刷新失败
                 let errorMessage = (error as? FeedError)?.shortDescription ?? error.localizedDescription
                 updatedSource.markFailure(error: errorMessage)

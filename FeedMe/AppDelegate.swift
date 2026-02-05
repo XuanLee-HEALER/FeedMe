@@ -19,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let refreshIcon = "arrow.triangle.2.circlepath"
     private let normalIcon = "newspaper"
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    func applicationDidFinishLaunching(_: Notification) {
         // 设置菜单构建器代理
         menuBuilder.delegate = self
 
@@ -29,7 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusItem.button {
             // 使用 SF Symbol 图标（设置为模板图像，自动适应菜单栏颜色）
             if let image = NSImage(systemSymbolName: normalIcon,
-                                   accessibilityDescription: "FeedMe") {
+                                   accessibilityDescription: "FeedMe")
+            {
                 image.isTemplate = true
                 button.image = image
             }
@@ -63,9 +64,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 启动时刷新一次（开发环境下禁用）
         #if !DEBUG
-        refreshAll()
+            refreshAll()
         #else
-        print("🔧 开发模式：跳过启动时自动刷新")
+            print("🔧 开发模式：跳过启动时自动刷新")
         #endif
     }
 
@@ -111,7 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 创建旋转动画
             let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
             rotation.fromValue = 0
-            rotation.toValue = -Double.pi * 2  // 逆时针
+            rotation.toValue = -Double.pi * 2 // 逆时针
             rotation.duration = 1.0
             rotation.repeatCount = .infinity
             rotation.timingFunction = CAMediaTimingFunction(name: .linear)
@@ -145,14 +146,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
             if let image = NSImage(systemSymbolName: symbolName,
                                    accessibilityDescription: "FeedMe")?
-                .withSymbolConfiguration(config) {
+                .withSymbolConfiguration(config)
+            {
                 image.isTemplate = true
                 button.image = image
             }
         }
     }
 
-    @objc private func handleStatusItemClick(_ sender: Any?) {
+    @objc private func handleStatusItemClick(_: Any?) {
         guard let event = NSApp.currentEvent else { return }
 
         if event.type == .rightMouseUp {
@@ -198,7 +200,8 @@ extension AppDelegate: MenuBuilderDelegate {
             // 安全校验：仅允许 http/https scheme
             if let url = URL(string: item.link),
                let scheme = url.scheme?.lowercased(),
-               scheme == "http" || scheme == "https" {
+               scheme == "http" || scheme == "https"
+            {
                 NSWorkspace.shared.open(url)
             } else {
                 print("Blocked unsafe URL scheme: \(item.link)")
@@ -218,7 +221,8 @@ extension AppDelegate: MenuBuilderDelegate {
         // 安全校验：仅允许 http/https scheme
         if let url = URL(string: link),
            let scheme = url.scheme?.lowercased(),
-           scheme == "http" || scheme == "https" {
+           scheme == "http" || scheme == "https"
+        {
             NSWorkspace.shared.open(url)
         } else {
             print("Blocked unsafe URL scheme: \(link)")
@@ -280,7 +284,6 @@ extension AppDelegate: MenuBuilderDelegate {
             print("Failed to mark all as read: \(error)")
         }
     }
-
 
     /// v1.3: 标记单个源为已读
     @objc func markSourceAsRead(_ sender: NSMenuItem) {

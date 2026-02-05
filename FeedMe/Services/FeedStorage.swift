@@ -40,7 +40,7 @@ final class FeedStorage {
 
         // 创建数据库队列
         var config = Configuration()
-        config.foreignKeysEnabled = true  // 显式启用外键约束
+        config.foreignKeysEnabled = true // 显式启用外键约束
         dbQueue = try DatabaseQueue(path: dbURL.path, configuration: config)
 
         // 运行迁移
@@ -102,7 +102,7 @@ final class FeedStorage {
         // v3: 添加 Tag 分组字段
         migrator.registerMigration("v3_add_tag") { db in
             try db.alter(table: "feedSources") { t in
-                t.add(column: "tag", .text)  // nullable, nil = "未分类"
+                t.add(column: "tag", .text) // nullable, nil = "未分类"
             }
             try db.create(index: "idx_feedSources_tag", on: "feedSources", columns: ["tag"])
         }
@@ -230,7 +230,7 @@ extension FeedStorage {
             // SQLite 中 NULL 在 DESC 排序时默认排在最前面，我们希望它排在最后面
             // 方案：先按是否为空排序（有值的排前面），再按时间降序
             request = request.order(
-                (FeedItem.Columns.publishedAt == nil).asc,  // 有值的在前（false < true）
+                (FeedItem.Columns.publishedAt == nil).asc, // 有值的在前（false < true）
                 FeedItem.Columns.publishedAt.desc,
                 FeedItem.Columns.firstSeenAt.desc
             )
@@ -293,7 +293,6 @@ extension FeedStorage {
     }
 }
 
-
 // MARK: - v1.1 新增查询方法
 
 extension FeedStorage {
@@ -348,23 +347,21 @@ extension FeedStorage {
     }
 }
 
-
 // MARK: - v1.3 Tag 分组相关查询
 
 extension FeedStorage {
     /// 获取所有唯一 Tag（不包含 nil）
     func fetchAllTags() throws -> [String] {
         try dbQueue.read { db in
-            let tags = try String.fetchAll(
+            try String.fetchAll(
                 db,
                 sql: """
-                    SELECT DISTINCT tag
-                    FROM \(FeedSource.databaseTableName)
-                    WHERE tag IS NOT NULL
-                    ORDER BY tag COLLATE NOCASE
-                    """
+                SELECT DISTINCT tag
+                FROM \(FeedSource.databaseTableName)
+                WHERE tag IS NOT NULL
+                ORDER BY tag COLLATE NOCASE
+                """
             )
-            return tags
         }
     }
 
@@ -462,10 +459,10 @@ extension FeedStorage {
                 let placeholders = sourceIds.map { _ in "?" }.joined(separator: ",")
                 try db.execute(
                     sql: """
-                        UPDATE \(FeedItem.databaseTableName)
-                        SET isRead = 1
-                        WHERE sourceId IN (\(placeholders))
-                        """,
+                    UPDATE \(FeedItem.databaseTableName)
+                    SET isRead = 1
+                    WHERE sourceId IN (\(placeholders))
+                    """,
                     arguments: StatementArguments(sourceIds)
                 )
             }

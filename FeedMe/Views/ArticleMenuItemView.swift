@@ -99,12 +99,12 @@ final class ArticleMenuItemView: NSView {
     }
 
     init(item: FeedItem, sourceName: String) {
-        self.itemId = item.id
-        self.articleTitle = item.displayTitle
+        itemId = item.id
+        articleTitle = item.displayTitle
         self.sourceName = sourceName
-        self.timeString = Self.timeFormatter.localizedString(for: item.displayDate, relativeTo: Date())
-        self.isRead = item.isRead
-        self.link = item.link
+        timeString = Self.timeFormatter.localizedString(for: item.displayDate, relativeTo: Date())
+        isRead = item.isRead
+        link = item.link
 
         super.init(frame: NSRect(x: 0, y: 0, width: Self.viewWidth, height: Self.viewHeight))
 
@@ -112,11 +112,11 @@ final class ArticleMenuItemView: NSView {
         updateContent()
 
         // 设置悬浮提示显示完整标题
-        self.toolTip = Self.formatTooltip(articleTitle)
+        toolTip = Self.formatTooltip(articleTitle)
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) {
+    required init?(coder _: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
@@ -185,7 +185,7 @@ final class ArticleMenuItemView: NSView {
 
     // MARK: - Mouse Events
 
-    override func mouseDown(with event: NSEvent) {
+    override func mouseDown(with _: NSEvent) {
         // 左键点击：先关闭菜单，再触发动作
         let menu = enclosingMenuItem?.menu
         menu?.cancelTracking()
@@ -196,7 +196,7 @@ final class ArticleMenuItemView: NSView {
         }
     }
 
-    override func rightMouseDown(with event: NSEvent) {
+    override func rightMouseDown(with _: NSEvent) {
         // 右键点击：触发标记已读，菜单保持打开
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }

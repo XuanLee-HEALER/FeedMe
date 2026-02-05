@@ -5,9 +5,9 @@
 //  Created by Claude on 2026/2/3.
 //
 
+import CryptoKit
 import Foundation
 import GRDB
-import CryptoKit
 
 /// Feed 文章条目模型
 struct FeedItem: Codable, Identifiable, FetchableRecord, PersistableRecord, Sendable {
@@ -66,7 +66,7 @@ struct FeedItem: Codable, Identifiable, FetchableRecord, PersistableRecord, Send
         self.firstSeenAt = firstSeenAt
 
         // 计算去重键
-        self.dedupeKey = Self.calculateDedupeKey(
+        dedupeKey = Self.calculateDedupeKey(
             guidOrId: guidOrId,
             link: link,
             title: title,

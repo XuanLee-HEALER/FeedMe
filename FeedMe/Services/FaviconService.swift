@@ -86,7 +86,8 @@ final class FaviconService {
         // 2. 检查磁盘缓存
         let diskPath = cacheDirectory.appendingPathComponent("\(domain).png")
         if FileManager.default.fileExists(atPath: diskPath.path),
-           let diskImage = NSImage(contentsOf: diskPath) {
+           let diskImage = NSImage(contentsOf: diskPath)
+        {
             memoryCache.setObject(diskImage, forKey: cacheKey)
             return diskImage
         }
@@ -112,7 +113,8 @@ final class FaviconService {
     /// 提取域名
     private func extractDomain(from urlString: String) -> String? {
         guard let url = URL(string: urlString),
-              let host = url.host else {
+              let host = url.host
+        else {
             return nil
         }
         return host
@@ -120,7 +122,7 @@ final class FaviconService {
 
     /// 判断是否应该跳过获取（失败过且未到重试时间）
     private func shouldSkipFetch(metadata: FaviconMetadata) -> Bool {
-        let retryInterval: TimeInterval = metadata.failedAttempts >= 3 ? 86400 : 3600  // 失败3次后24小时重试，否则1小时
+        let retryInterval: TimeInterval = metadata.failedAttempts >= 3 ? 86400 : 3600 // 失败3次后24小时重试，否则1小时
         return Date().timeIntervalSince(metadata.lastFetchDate) < retryInterval
     }
 
@@ -147,8 +149,9 @@ final class FaviconService {
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
             guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode),
-                  let image = NSImage(data: data) else {
+                  (200 ... 299).contains(httpResponse.statusCode),
+                  let image = NSImage(data: data)
+            else {
                 return nil
             }
             return resizeIfNeeded(image)
@@ -165,8 +168,9 @@ final class FaviconService {
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
             guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode),
-                  let image = NSImage(data: data) else {
+                  (200 ... 299).contains(httpResponse.statusCode),
+                  let image = NSImage(data: data)
+            else {
                 return nil
             }
             return resizeIfNeeded(image)
@@ -201,7 +205,8 @@ final class FaviconService {
         let diskPath = cacheDirectory.appendingPathComponent("\(domain).png")
         if let tiffData = image.tiffRepresentation,
            let bitmapImage = NSBitmapImageRep(data: tiffData),
-           let pngData = bitmapImage.representation(using: .png, properties: [:]) {
+           let pngData = bitmapImage.representation(using: .png, properties: [:])
+        {
             try? pngData.write(to: diskPath)
         }
     }
@@ -224,7 +229,8 @@ final class FaviconService {
     private func loadMetadata() {
         guard FileManager.default.fileExists(atPath: metadataURL.path),
               let data = try? Data(contentsOf: metadataURL),
-              let loaded = try? JSONDecoder().decode([String: FaviconMetadata].self, from: data) else {
+              let loaded = try? JSONDecoder().decode([String: FaviconMetadata].self, from: data)
+        else {
             return
         }
         metadata = loaded

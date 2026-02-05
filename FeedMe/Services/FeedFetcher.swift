@@ -13,7 +13,7 @@ private actor AsyncSemaphore {
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
     init(value: Int) {
-        self.count = value
+        count = value
     }
 
     func wait() async {
@@ -62,13 +62,13 @@ final class FeedFetcher: Sendable {
     /// 允许的内容类型
     private let allowedContentTypes = [
         "application/rss+xml",
-        "application/x-rss+xml",  // 非标准但常见的 RSS MIME 类型
+        "application/x-rss+xml", // 非标准但常见的 RSS MIME 类型
         "application/atom+xml",
-        "application/x-atom+xml",  // 非标准但常见的 Atom MIME 类型
+        "application/x-atom+xml", // 非标准但常见的 Atom MIME 类型
         "application/xml",
         "text/xml",
         "application/json",
-        "text/html"  // 用于 Feed 自动发现
+        "text/html", // 用于 Feed 自动发现
     ]
 
     /// 单例
@@ -139,10 +139,10 @@ final class FeedFetcher: Sendable {
                 // 未修改
                 return .notModified
 
-            case 400..<500:
+            case 400 ..< 500:
                 throw FeedError.httpError(httpResponse.statusCode)
 
-            case 500..<600:
+            case 500 ..< 600:
                 throw FeedError.httpError(httpResponse.statusCode)
 
             default:
@@ -192,4 +192,3 @@ final class FeedFetcher: Sendable {
         }
     }
 }
-

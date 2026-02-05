@@ -5,15 +5,15 @@
 //  Created by Claude on 2026/2/3.
 //
 
-import Foundation
 import FeedKit
+import Foundation
 import XMLKit
 
 /// 重命名本地 FeedError 以避免与 FeedKit.FeedError 冲突
 typealias AppFeedError = FeedMe.FeedError
 
 /// Feed 解析服务
-final class FeedParserService {
+enum FeedParserService {
     /// 解析 RSS/Atom Feed 数据
     /// - Parameters:
     ///   - data: Feed XML 数据
@@ -126,7 +126,7 @@ final class FeedParserService {
 
         return entries.compactMap { entry -> FeedItem? in
             // 查找 alternate link 或第一个 link
-            var link: String = ""
+            var link = ""
 
             if let links = entry.links {
                 // 优先找 alternate 类型的链接
@@ -141,7 +141,8 @@ final class FeedParserService {
                 // 如果没找到 alternate，使用第一个链接
                 if link.isEmpty, let firstLink = links.first,
                    let attributes = firstLink.attributes,
-                   let href = attributes.href {
+                   let href = attributes.href
+                {
                     link = href
                 }
             }
@@ -198,14 +199,14 @@ final class FeedParserService {
         guard let feed = try? Feed(data: data) else { return nil }
 
         switch feed {
-        case .rss(let rssFeed):
+        case let .rss(rssFeed):
             return rssFeed.channel?.title
 
-        case .atom(let atomFeed):
+        case let .atom(atomFeed):
             // AtomFeed.title 是 XMLElement，使用 .text 获取内容
             return atomFeed.title?.text
 
-        case .json(let jsonFeed):
+        case let .json(jsonFeed):
             return jsonFeed.title
         }
     }

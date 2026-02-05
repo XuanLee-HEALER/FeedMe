@@ -5,11 +5,11 @@
 //  Created by Claude on 2026/2/3.
 //
 
-import Foundation
 import FeedKit
+import Foundation
 
 /// Feed 自动发现服务
-final class FeedDiscovery {
+enum FeedDiscovery {
     /// 发现的 Feed 信息
     struct DiscoveredFeed {
         let url: String
@@ -31,8 +31,9 @@ final class FeedDiscovery {
     static func discover(from siteURL: String) async throws -> [DiscoveredFeed] {
         guard let url = URL(string: siteURL),
               let scheme = url.scheme?.lowercased(),
-              (scheme == "http" || scheme == "https"),
-              url.host != nil else {
+              scheme == "http" || scheme == "https",
+              url.host != nil
+        else {
             throw FeedError.invalidURL(siteURL)
         }
 
@@ -47,7 +48,8 @@ final class FeedDiscovery {
         // 检查内容类型
         if let httpResponse = response as? HTTPURLResponse,
            let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased(),
-           !contentType.contains("text/html") && !contentType.contains("application/xhtml") {
+           !contentType.contains("text/html"), !contentType.contains("application/xhtml")
+        {
             throw FeedError.parseError("非 HTML 页面")
         }
 
@@ -92,19 +94,21 @@ final class FeedDiscovery {
                         feedURL = hrefString
                     } else if hrefString.starts(with: "/"),
                               let scheme = baseURL.scheme,
-                              let host = baseURL.host {
+                              let host = baseURL.host
+                    {
                         feedURL = "\(scheme)://\(host)\(hrefString)"
                     } else if let resolved = URL(string: hrefString, relativeTo: baseURL)?.absoluteString {
                         feedURL = resolved
                     } else {
-                        continue  // 无法解析，跳过此条目
+                        continue // 无法解析，跳过此条目
                     }
 
                     // 验证解析后的 URL 是否有效
                     guard let parsedURL = URL(string: feedURL),
                           let scheme = parsedURL.scheme?.lowercased(),
-                          (scheme == "http" || scheme == "https") else {
-                        continue  // 无效 URL，跳过
+                          scheme == "http" || scheme == "https"
+                    else {
+                        continue // 无效 URL，跳过
                     }
 
                     // 尝试提取 title（可选）
@@ -112,7 +116,8 @@ final class FeedDiscovery {
                     var title: String?
                     if let titleRegex = try? NSRegularExpression(pattern: titlePattern),
                        let titleMatch = titleRegex.firstMatch(in: html, range: match.range),
-                       titleMatch.numberOfRanges == 2 {
+                       titleMatch.numberOfRanges == 2
+                    {
                         title = nsString.substring(with: titleMatch.range(at: 1))
                     }
 
@@ -131,8 +136,9 @@ final class FeedDiscovery {
     static func validateFeedURL(_ urlString: String) async throws -> Bool {
         guard let url = URL(string: urlString),
               let scheme = url.scheme?.lowercased(),
-              (scheme == "http" || scheme == "https"),
-              url.host != nil else {
+              scheme == "http" || scheme == "https",
+              url.host != nil
+        else {
             throw FeedError.invalidURL(urlString)
         }
 

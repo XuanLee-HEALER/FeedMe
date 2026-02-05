@@ -25,8 +25,8 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
     /// 构建左键菜单（文章列表）
     func buildArticleListMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.delegate = self  // 设置菜单代理以接收高亮变化
-        menu.autoenablesItems = false  // 防止没有 action 的菜单项被自动禁用
+        menu.delegate = self // 设置菜单代理以接收高亮变化
+        menu.autoenablesItems = false // 防止没有 action 的菜单项被自动禁用
 
         // 保存菜单引用，用于动态更新
         currentArticleMenu = menu
@@ -76,7 +76,7 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
             let sortedUnread = allUnread.sorted { $0.displayDate > $1.displayDate }
 
             // 保存到实例变量，供搜索使用
-            self.allUnreadItems = sortedUnread
+            allUnreadItems = sortedUnread
 
             // 预加载源名称缓存
             var sourceNameCache: [String: String] = [:]
@@ -250,7 +250,7 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
     /// 创建两行展示的文章菜单项（用于主列表）
     private func createTwoLineArticleMenuItem(_ item: FeedItem, sourceName: String) -> NSMenuItem {
         let menuItem = NSMenuItem()
-        menuItem.isEnabled = true  // 确保菜单项是启用的
+        menuItem.isEnabled = true // 确保菜单项是启用的
 
         // 使用自定义视图
         let customView = ArticleMenuItemView(item: item, sourceName: sourceName)
@@ -358,7 +358,6 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
         return sourceItem
     }
 
-
     /// v1.3: 处理搜索文本变化
     private func handleSearchTextChanged(_ searchText: String) {
         guard let menu = currentArticleMenu else { return }
@@ -392,7 +391,7 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
         guard headerIndex >= 0 else { return }
 
         // 移除 header 之后的所有内容
-        while menu.items.count > headerIndex + 2 {  // 保留 header 和其后的分隔线
+        while menu.items.count > headerIndex + 2 { // 保留 header 和其后的分隔线
             menu.removeItem(at: headerIndex + 2)
         }
 
@@ -433,7 +432,7 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
 
         return allUnreadItems.filter { item in
             item.title.localizedLowercase.contains(lowercasedText) ||
-            (item.summary ?? "").localizedLowercase.contains(lowercasedText)
+                (item.summary ?? "").localizedLowercase.contains(lowercasedText)
         }
     }
 
@@ -451,7 +450,7 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
     /// - Parameters:
     ///   - itemId: 被标记已读的文章 ID
     ///   - menuItem: 对应的菜单项
-    func updateMenuAfterMarkingRead(itemId: String, menuItem: NSMenuItem) {
+    func updateMenuAfterMarkingRead(itemId _: String, menuItem: NSMenuItem) {
         guard let menu = currentArticleMenu else { return }
 
         do {
@@ -495,10 +494,11 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
             }
 
             // 如果主列表已空，显示"全部已读"
-            if currentArticleCount == 0 && sortedUnread.isEmpty {
+            if currentArticleCount == 0, sortedUnread.isEmpty {
                 // 找到"最近更新"标题后的分隔符
                 if let separatorIndex = menu.items.firstIndex(where: { $0.isSeparatorItem && $0.title.isEmpty }),
-                   separatorIndex > 0 {
+                   separatorIndex > 0
+                {
                     let allReadItem = NSMenuItem(title: "✓ 全部已读", action: nil, keyEquivalent: "")
                     allReadItem.isEnabled = false
                     menu.insertItem(allReadItem, at: separatorIndex + 1)
@@ -513,7 +513,7 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
                 } else {
                     // 没有更多文章了，移除"更多"菜单
                     if moreItemIndex > 0, menu.items[moreItemIndex - 1].isSeparatorItem {
-                        menu.removeItem(at: moreItemIndex - 1)  // 移除分隔符
+                        menu.removeItem(at: moreItemIndex - 1) // 移除分隔符
                     }
                     menu.removeItem(at: moreItemIndex)
                 }
@@ -526,16 +526,18 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
 
     // MARK: - NSMenuDelegate
 
-    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
+    func menu(_: NSMenu, willHighlight item: NSMenuItem?) {
         // 清除旧的高亮
         if let oldItem = currentHighlightedItem,
-           let oldView = oldItem.view as? ArticleMenuItemView {
+           let oldView = oldItem.view as? ArticleMenuItemView
+        {
             oldView.isHighlighted = false
         }
 
         // 设置新的高亮
         if let newItem = item,
-           let newView = newItem.view as? ArticleMenuItemView {
+           let newView = newItem.view as? ArticleMenuItemView
+        {
             newView.isHighlighted = true
         }
 
@@ -552,8 +554,8 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
     func refreshSource(_ sender: NSMenuItem)
     func markAsReadById(_ itemId: String)
     func markAllAsRead()
-    func markSourceAsRead(_ sender: NSMenuItem)  // v1.3: 标记单个源为已读
-    func markTagAsRead(_ sender: NSMenuItem)      // v1.3: 标记 Tag 下所有源为已读
+    func markSourceAsRead(_ sender: NSMenuItem) // v1.3: 标记单个源为已读
+    func markTagAsRead(_ sender: NSMenuItem) // v1.3: 标记 Tag 下所有源为已读
     func openManagement()
     func openSettings()
     func openAbout()

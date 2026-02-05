@@ -17,8 +17,8 @@ final class SearchMenuItemView: NSView, NSSearchFieldDelegate {
     private let searchField: NSSearchField = {
         let field = NSSearchField()
         field.placeholderString = "搜索文章…"
-        field.sendsSearchStringImmediately = true  // 立即发送搜索
-        field.sendsWholeSearchString = false  // 不等待回车
+        field.sendsSearchStringImmediately = true // 立即发送搜索
+        field.sendsWholeSearchString = false // 不等待回车
         return field
     }()
 
@@ -37,7 +37,7 @@ final class SearchMenuItemView: NSView, NSSearchFieldDelegate {
         NSLayoutConstraint.activate([
             searchField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             searchField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            searchField.centerYAnchor.constraint(equalTo: centerYAnchor)
+            searchField.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
 
         // 设置代理和 action
@@ -46,7 +46,8 @@ final class SearchMenuItemView: NSView, NSSearchFieldDelegate {
         searchField.action = #selector(searchFieldChanged)
     }
 
-    required init?(coder: NSCoder) {
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
@@ -56,7 +57,7 @@ final class SearchMenuItemView: NSView, NSSearchFieldDelegate {
     }
 
     /// 代理方法：文本变化时立即触发
-    func controlTextDidChange(_ obj: Notification) {
+    func controlTextDidChange(_: Notification) {
         onSearchTextChanged?(searchField.stringValue)
     }
 

@@ -18,7 +18,7 @@ extension Notification.Name {
 struct FeedManagementView: View {
     @State private var sources: [FeedSource] = []
     @State private var showingAddSheet = false
-    @State private var selectedSources: Set<FeedSource.ID> = []  // 支持多选
+    @State private var selectedSources: Set<FeedSource.ID> = [] // 支持多选
     @State private var showingImportPicker = false
     @State private var showingExportPicker = false
     @State private var importError: String?
@@ -31,7 +31,7 @@ struct FeedManagementView: View {
         }
         return sources.filter { source in
             source.title.localizedCaseInsensitiveContains(searchText) ||
-            source.feedURL.localizedCaseInsensitiveContains(searchText)
+                source.feedURL.localizedCaseInsensitiveContains(searchText)
         }
     }
 
@@ -185,7 +185,7 @@ struct FeedManagementView: View {
             contentType: .xml,
             defaultFilename: "FeedMe-Subscriptions.opml"
         ) { result in
-            if case .failure(let error) = result {
+            if case let .failure(error) = result {
                 print("Export failed: \(error)")
             }
         }
@@ -204,7 +204,7 @@ struct FeedManagementView: View {
 
     private func handleImportResult(_ result: Result<[URL], Error>) {
         switch result {
-        case .success(let urls):
+        case let .success(urls):
             guard let url = urls.first else { return }
 
             Task { @MainActor in
@@ -231,7 +231,7 @@ struct FeedManagementView: View {
                 }
             }
 
-        case .failure(let error):
+        case let .failure(error):
             importError = error.localizedDescription
         }
     }
@@ -377,7 +377,7 @@ struct FeedSourceDetailView: View {
     @State private var editedRefreshInterval: Int = 0
     @State private var editedTag: String = ""
 
-    // 自动保存任务
+    /// 自动保存任务
     @State private var saveTask: Task<Void, Never>?
 
     var body: some View {
@@ -433,7 +433,7 @@ struct FeedSourceDetailView: View {
                 if let lastFetched = source.lastFetchedAt {
                     LabeledContent("最后刷新", value: lastFetched.formatted())
                 }
-                
+
                 // 错误详情（折叠展示）
                 if let error = source.lastError {
                     DisclosureGroup {
@@ -442,7 +442,7 @@ struct FeedSourceDetailView: View {
                                 .font(.system(.body, design: .monospaced))
                                 .foregroundStyle(.red)
                                 .textSelection(.enabled)
-                            
+
                             if source.consecutiveFailures > 0 {
                                 Divider()
                                 Text("连续失败 \(source.consecutiveFailures) 次")
@@ -486,7 +486,7 @@ struct FeedSourceDetailView: View {
     private func scheduleSave() {
         saveTask?.cancel()
         saveTask = Task {
-            try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5s
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 performSave()
@@ -621,7 +621,9 @@ struct AddFeedSheet: View {
 // MARK: - OPML 文档（用于导出）
 
 struct OPMLDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.xml] }
+    static var readableContentTypes: [UTType] {
+        [.xml]
+    }
 
     let sources: [FeedSource]
 
@@ -629,12 +631,12 @@ struct OPMLDocument: FileDocument {
         self.sources = sources
     }
 
-    init(configuration: ReadConfiguration) throws {
+    init(configuration _: ReadConfiguration) throws {
         // 导出时不需要读取
-        self.sources = []
+        sources = []
     }
 
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+    func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
         let data = OPMLService.shared.exportOPML(sources: sources)
         return FileWrapper(regularFileWithContents: data)
     }

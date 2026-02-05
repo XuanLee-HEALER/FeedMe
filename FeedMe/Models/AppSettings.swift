@@ -5,9 +5,9 @@
 //  Created by Claude on 2026/2/3.
 //
 
+import Combine
 import Foundation
 import SwiftUI
-import Combine
 
 /// 应用设置管理
 final class AppSettings: ObservableObject {
@@ -66,5 +66,5 @@ extension AppSettings {
     static let refreshIntervalOptions = [5, 15, 30, 60]
 
     /// 显示条数选项
-    static let displayCountRange = 3...10
+    static let displayCountRange = 3 ... 10
 }

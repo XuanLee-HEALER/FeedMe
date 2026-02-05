@@ -33,25 +33,25 @@ enum FeedError: LocalizedError {
     /// 错误描述（中文）
     var errorDescription: String? {
         switch self {
-        case .networkError(let error):
+        case let .networkError(error):
             return "网络错误: \(error.localizedDescription)"
 
-        case .parseError(let message):
+        case let .parseError(message):
             return "解析失败: \(message)"
 
-        case .invalidURL(let url):
+        case let .invalidURL(url):
             return "无效的 URL: \(url)"
 
         case .timeout:
             return "请求超时"
 
-        case .httpError(let code):
+        case let .httpError(code):
             return "HTTP 错误 \(code)"
 
         case .feedNotFound:
             return "未找到 RSS/Atom Feed"
 
-        case .unknown(let message):
+        case let .unknown(message):
             return "未知错误: \(message)"
         }
     }
@@ -71,7 +71,7 @@ enum FeedError: LocalizedError {
         case .timeout:
             return "请求超时"
 
-        case .httpError(let code):
+        case let .httpError(code):
             return "HTTP \(code)"
 
         case .feedNotFound:

@@ -12,20 +12,19 @@ import UserNotifications
 final class NotificationService: NSObject {
     static let shared = NotificationService()
 
-    private override init() {
+    override private init() {
         super.init()
     }
 
     /// 请求通知权限
     func requestAuthorization() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, error in
             if let error = error {
                 print("Notification authorization error: \(error)")
             }
         }
         UNUserNotificationCenter.current().delegate = self
     }
-
 
     /// 检查通知权限状态
     func checkAuthorizationStatus() async -> UNAuthorizationStatus {
@@ -44,9 +43,8 @@ final class NotificationService: NSObject {
         case .notDetermined:
             // 未确定：请求权限
             do {
-                let granted = try await UNUserNotificationCenter.current()
+                return try await UNUserNotificationCenter.current()
                     .requestAuthorization(options: [.alert, .sound, .badge])
-                return granted
             } catch {
                 print("❌ 通知权限请求失败: \(error)")
                 return false
@@ -155,8 +153,8 @@ final class NotificationService: NSObject {
 extension NotificationService: UNUserNotificationCenterDelegate {
     /// 前台显示通知
     func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification,
+        _: UNUserNotificationCenter,
+        willPresent _: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         // 即使在前台也显示通知
@@ -165,8 +163,8 @@ extension NotificationService: UNUserNotificationCenterDelegate {
 
     /// 用户点击通知
     func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse,
+        _: UNUserNotificationCenter,
+        didReceive _: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         // 点击通知后可以打开应用或显示文章列表

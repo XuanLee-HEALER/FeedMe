@@ -122,17 +122,17 @@ extension FeedSource {
 
     /// 标记刷新成功
     mutating func markSuccess(etag: String? = nil, lastModified: String? = nil) {
-        self.lastFetchedAt = Date()
+        lastFetchedAt = Date()
         self.etag = etag
         self.lastModified = lastModified
-        self.lastError = nil
-        self.consecutiveFailures = 0
+        lastError = nil
+        consecutiveFailures = 0
     }
 
     /// 标记刷新失败
     mutating func markFailure(error: String) {
-        self.lastFetchedAt = Date()
-        self.lastError = error
-        self.consecutiveFailures += 1
+        lastFetchedAt = Date()
+        lastError = error
+        consecutiveFailures += 1
     }
 }
