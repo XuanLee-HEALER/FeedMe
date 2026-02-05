@@ -375,6 +375,7 @@ struct FeedSourceDetailView: View {
     @State private var editedFeedURL: String = ""
     @State private var editedIsEnabled: Bool = true
     @State private var editedRefreshInterval: Int = 0
+    @State private var editedTag: String = ""
 
     // 自动保存任务
     @State private var saveTask: Task<Void, Never>?
@@ -415,6 +416,17 @@ struct FeedSourceDetailView: View {
                 .onChange(of: editedRefreshInterval) {
                     saveImmediately()
                 }
+            }
+
+            Section("分组") {
+                TextField("标签（可选）", text: $editedTag)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: editedTag) {
+                        scheduleSave()
+                    }
+                Text("留空表示未分类")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("状态") {
@@ -467,6 +479,7 @@ struct FeedSourceDetailView: View {
         editedFeedURL = source.feedURL
         editedIsEnabled = source.isEnabled
         editedRefreshInterval = source.refreshIntervalMinutes
+        editedTag = source.tag ?? ""
     }
 
     /// 延迟保存（用于 TextField，防止频繁保存）
@@ -494,6 +507,10 @@ struct FeedSourceDetailView: View {
         updatedSource.feedURL = editedFeedURL.trimmingCharacters(in: .whitespacesAndNewlines)
         updatedSource.isEnabled = editedIsEnabled
         updatedSource.refreshIntervalMinutes = editedRefreshInterval
+
+        // 处理 Tag（空字符串转为 nil）
+        let trimmedTag = editedTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        updatedSource.tag = trimmedTag.isEmpty ? nil : trimmedTag
 
         // 验证数据有效性
         guard !updatedSource.title.isEmpty, !updatedSource.feedURL.isEmpty else {

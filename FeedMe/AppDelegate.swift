@@ -271,6 +271,33 @@ extension AppDelegate: MenuBuilderDelegate {
         }
     }
 
+
+    /// v1.3: 标记单个源为已读
+    @objc func markSourceAsRead(_ sender: NSMenuItem) {
+        guard let sourceId = sender.representedObject as? String else { return }
+
+        do {
+            try FeedStorage.shared.markAllAsRead(sourceId: sourceId)
+            updateUnreadBadge()
+            print("✓ 源 \(sourceId) 的所有文章已标为已读")
+        } catch {
+            print("❌ 标记源为已读失败: \(error)")
+        }
+    }
+
+    /// v1.3: 标记 Tag 下所有源为已读
+    @objc func markTagAsRead(_ sender: NSMenuItem) {
+        guard let tag = sender.representedObject as? String else { return }
+
+        do {
+            try FeedStorage.shared.markAllAsReadForTag(tag)
+            updateUnreadBadge()
+            print("✓ Tag '\(tag)' 下的所有文章已标为已读")
+        } catch {
+            print("❌ 标记 Tag 为已读失败: \(error)")
+        }
+    }
+
     @objc func openManagement() {
         if managementWindow == nil {
             let contentView = FeedManagementView()

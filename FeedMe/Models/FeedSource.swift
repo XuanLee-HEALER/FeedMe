@@ -48,6 +48,9 @@ struct FeedSource: Codable, Identifiable, Hashable, FetchableRecord, Persistable
     /// 连续失败次数（用于错误退避）
     var consecutiveFailures: Int
 
+    /// 分组标签（nil = "未分类"）
+    var tag: String?
+
     /// 初始化
     init(
         id: String = UUID().uuidString,
@@ -61,7 +64,8 @@ struct FeedSource: Codable, Identifiable, Hashable, FetchableRecord, Persistable
         etag: String? = nil,
         lastModified: String? = nil,
         lastError: String? = nil,
-        consecutiveFailures: Int = 0
+        consecutiveFailures: Int = 0,
+        tag: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -75,6 +79,7 @@ struct FeedSource: Codable, Identifiable, Hashable, FetchableRecord, Persistable
         self.lastModified = lastModified
         self.lastError = lastError
         self.consecutiveFailures = consecutiveFailures
+        self.tag = tag
     }
 }
 
@@ -95,6 +100,7 @@ extension FeedSource {
         static let lastModified = Column("lastModified")
         static let lastError = Column("lastError")
         static let consecutiveFailures = Column("consecutiveFailures")
+        static let tag = Column("tag")
     }
 }
 

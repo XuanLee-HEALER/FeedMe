@@ -17,6 +17,11 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
     /// 当前打开的文章列表菜单（用于动态更新）
     private weak var currentArticleMenu: NSMenu?
 
+    /// v1.3 搜索相关
+    private weak var searchView: SearchMenuItemView?
+    private var allUnreadItems = [FeedItem]()
+    private var sourceNameCache = [String: String]()
+
     /// 构建左键菜单（文章列表）
     func buildArticleListMenu() -> NSMenu {
         let menu = NSMenu()
@@ -47,6 +52,18 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
                 return menu
             }
 
+            // v1.3: 顶部搜索框
+            let searchMenuItem = NSMenuItem()
+            let searchView = SearchMenuItemView()
+            searchView.onSearchTextChanged = { [weak self] searchText in
+                self?.handleSearchTextChanged(searchText)
+            }
+            searchMenuItem.view = searchView
+            menu.addItem(searchMenuItem)
+            self.searchView = searchView
+
+            menu.addItem(NSMenuItem.separator())
+
             // 顶部：最近更新
             let headerItem = NSMenuItem(title: "最近更新", action: nil, keyEquivalent: "")
             headerItem.isEnabled = false
@@ -58,6 +75,16 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
             let allUnread = try storage.fetchItems(unreadOnly: true)
             let sortedUnread = allUnread.sorted { $0.displayDate > $1.displayDate }
 
+            // 保存到实例变量，供搜索使用
+            self.allUnreadItems = sortedUnread
+
+            // 预加载源名称缓存
+            var sourceNameCache: [String: String] = [:]
+            for source in sources {
+                sourceNameCache[source.id] = source.title
+            }
+            self.sourceNameCache = sourceNameCache
+
             if sortedUnread.isEmpty {
                 // 空状态：全部已读
                 let allReadItem = NSMenuItem(title: "✓ 全部已读", action: nil, keyEquivalent: "")
@@ -68,12 +95,6 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
                 let displayCount = settings.displayCount
                 let topItems = Array(sortedUnread.prefix(displayCount))
                 let remainingItems = Array(sortedUnread.dropFirst(displayCount))
-
-                // 预加载源名称缓存
-                var sourceNameCache: [String: String] = [:]
-                for source in sources {
-                    sourceNameCache[source.id] = source.title
-                }
 
                 // 添加两行展示的文章条目
                 for item in topItems {
@@ -151,52 +172,47 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
 
         do {
             let storage = FeedStorage.shared
-            let sources = try storage.fetchAllSourcesSortedByName()
+            let groupedSources = try storage.fetchSourcesGroupedByTag()
 
-            if !sources.isEmpty {
-                // 按名称排序显示所有订阅源
-                for source in sources {
-                    let sourceItem = NSMenuItem(title: source.title, action: nil, keyEquivalent: "")
+            if !groupedSources.isEmpty {
+                // 按 Tag 分组展示订阅源
+                for (tag, sources) in groupedSources {
+                    if let tag = tag {
+                        // Tag 分组：创建二级菜单
+                        let unreadCount = try storage.fetchUnreadCountForTag(tag)
+                        let tagTitle = "\(tag) (\(unreadCount))"
+                        let tagItem = NSMenuItem(title: tagTitle, action: nil, keyEquivalent: "")
+                        let tagSubmenu = NSMenu()
 
-                    // 禁用的源置灰
-                    if !source.isEnabled {
-                        sourceItem.isEnabled = false
+                        // 添加该 Tag 下的所有订阅源
+                        for source in sources {
+                            tagSubmenu.addItem(buildSourceMenuItem(source))
+                        }
+
+                        // 分隔线
+                        if !sources.isEmpty {
+                            tagSubmenu.addItem(NSMenuItem.separator())
+                        }
+
+                        // Tag 级别的"全部标为已读"
+                        let markTagReadItem = NSMenuItem(
+                            title: "全部标为已读",
+                            action: #selector(MenuBuilderDelegate.markTagAsRead(_:)),
+                            keyEquivalent: ""
+                        )
+                        markTagReadItem.target = delegate
+                        markTagReadItem.representedObject = tag
+                        markTagReadItem.isEnabled = unreadCount > 0
+                        tagSubmenu.addItem(markTagReadItem)
+
+                        tagItem.submenu = tagSubmenu
+                        menu.addItem(tagItem)
+                    } else {
+                        // 未分类订阅源：直接平铺展示（与 Tag 分组同级）
+                        for source in sources {
+                            menu.addItem(buildSourceMenuItem(source))
+                        }
                     }
-
-                    // 创建子菜单
-                    let submenu = NSMenu()
-
-                    let refreshSourceItem = NSMenuItem(
-                        title: "刷新此源",
-                        action: #selector(MenuBuilderDelegate.refreshSource(_:)),
-                        keyEquivalent: ""
-                    )
-                    refreshSourceItem.target = delegate
-                    refreshSourceItem.representedObject = source.id
-                    refreshSourceItem.isEnabled = source.isEnabled
-                    submenu.addItem(refreshSourceItem)
-
-                    // 显示最后刷新时间（如果有）
-                    if let lastFetched = source.lastFetchedAt {
-                        let formatter = RelativeDateTimeFormatter()
-                        formatter.unitsStyle = .abbreviated
-                        let relativeTime = formatter.localizedString(for: lastFetched, relativeTo: Date())
-
-                        let lastFetchedItem = NSMenuItem(title: "上次刷新: \(relativeTime)", action: nil, keyEquivalent: "")
-                        lastFetchedItem.isEnabled = false
-                        submenu.addItem(lastFetchedItem)
-                    }
-
-                    // 显示错误信息（如果有）
-                    if let lastError = source.lastError, !lastError.isEmpty {
-                        submenu.addItem(NSMenuItem.separator())
-                        let errorItem = NSMenuItem(title: "⚠️ \(lastError)", action: nil, keyEquivalent: "")
-                        errorItem.isEnabled = false
-                        submenu.addItem(errorItem)
-                    }
-
-                    sourceItem.submenu = submenu
-                    menu.addItem(sourceItem)
                 }
 
                 menu.addItem(NSMenuItem.separator())
@@ -274,6 +290,151 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
         menuItem.representedObject = item.id
 
         return menuItem
+    }
+
+    /// 构建单个订阅源的菜单项（带子菜单）
+    /// - Parameter source: 订阅源
+    /// - Returns: NSMenuItem
+    private func buildSourceMenuItem(_ source: FeedSource) -> NSMenuItem {
+        let sourceItem = NSMenuItem(title: source.title, action: nil, keyEquivalent: "")
+
+        // 禁用的源置灰
+        if !source.isEnabled {
+            sourceItem.isEnabled = false
+        }
+
+        // 创建子菜单
+        let submenu = NSMenu()
+
+        let refreshSourceItem = NSMenuItem(
+            title: "刷新此源",
+            action: #selector(MenuBuilderDelegate.refreshSource(_:)),
+            keyEquivalent: ""
+        )
+        refreshSourceItem.target = delegate
+        refreshSourceItem.representedObject = source.id
+        refreshSourceItem.isEnabled = source.isEnabled
+        submenu.addItem(refreshSourceItem)
+
+        // 显示最后刷新时间（如果有）
+        if let lastFetched = source.lastFetchedAt {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .abbreviated
+            let relativeTime = formatter.localizedString(for: lastFetched, relativeTo: Date())
+
+            let lastFetchedItem = NSMenuItem(title: "上次刷新: \(relativeTime)", action: nil, keyEquivalent: "")
+            lastFetchedItem.isEnabled = false
+            submenu.addItem(lastFetchedItem)
+        }
+
+        // 显示错误信息（如果有）
+        if let lastError = source.lastError, !lastError.isEmpty {
+            submenu.addItem(NSMenuItem.separator())
+            let errorItem = NSMenuItem(title: "⚠️ \(lastError)", action: nil, keyEquivalent: "")
+            errorItem.isEnabled = false
+            submenu.addItem(errorItem)
+        }
+
+        // 分隔线
+        submenu.addItem(NSMenuItem.separator())
+
+        // 单个源的"标记为已读"
+        do {
+            let unreadCount = try FeedStorage.shared.fetchUnreadCount(for: source.id)
+            let markReadItem = NSMenuItem(
+                title: "标记为已读",
+                action: #selector(MenuBuilderDelegate.markSourceAsRead(_:)),
+                keyEquivalent: ""
+            )
+            markReadItem.target = delegate
+            markReadItem.representedObject = source.id
+            markReadItem.isEnabled = unreadCount > 0
+            submenu.addItem(markReadItem)
+        } catch {
+            print("Failed to fetch unread count for source \(source.id): \(error)")
+        }
+
+        sourceItem.submenu = submenu
+        return sourceItem
+    }
+
+
+    /// v1.3: 处理搜索文本变化
+    private func handleSearchTextChanged(_ searchText: String) {
+        guard let menu = currentArticleMenu else { return }
+
+        let trimmedText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 如果搜索文本为空，重建整个菜单
+        if trimmedText.isEmpty {
+            // 移除所有项并重建
+            menu.removeAllItems()
+            let newMenu = buildArticleListMenu()
+            for item in newMenu.items {
+                menu.addItem(item)
+            }
+            return
+        }
+
+        // 执行搜索过滤
+        let filteredItems = filterArticles(searchText: trimmedText)
+
+        // 重建菜单内容（保留搜索框和 header）
+        // 找到"最近更新" header 的位置
+        var headerIndex = -1
+        for (index, item) in menu.items.enumerated() {
+            if item.title == "最近更新" {
+                headerIndex = index
+                break
+            }
+        }
+
+        guard headerIndex >= 0 else { return }
+
+        // 移除 header 之后的所有内容
+        while menu.items.count > headerIndex + 2 {  // 保留 header 和其后的分隔线
+            menu.removeItem(at: headerIndex + 2)
+        }
+
+        // 显示搜索结果
+        if filteredItems.isEmpty {
+            let emptyItem = NSMenuItem(title: "未找到相关文章", action: nil, keyEquivalent: "")
+            emptyItem.isEnabled = false
+            menu.addItem(emptyItem)
+        } else {
+            // 添加搜索结果（最多显示 50 条）
+            let maxResults = 50
+            let displayItems = Array(filteredItems.prefix(maxResults))
+
+            for item in displayItems {
+                let sourceName = sourceNameCache[item.sourceId] ?? "未知来源"
+                menu.addItem(createTwoLineArticleMenuItem(item, sourceName: sourceName))
+            }
+
+            if filteredItems.count > maxResults {
+                menu.addItem(NSMenuItem.separator())
+                let moreItem = NSMenuItem(title: "还有 \(filteredItems.count - maxResults) 条结果未显示", action: nil, keyEquivalent: "")
+                moreItem.isEnabled = false
+                menu.addItem(moreItem)
+            }
+        }
+
+        // 底部操作
+        menu.addItem(NSMenuItem.separator())
+
+        let refreshItem = NSMenuItem(title: "刷新全部源", action: #selector(MenuBuilderDelegate.refreshAll), keyEquivalent: "r")
+        refreshItem.target = delegate
+        menu.addItem(refreshItem)
+    }
+
+    /// v1.3: 过滤文章（搜索标题和摘要）
+    private func filterArticles(searchText: String) -> [FeedItem] {
+        let lowercasedText = searchText.localizedLowercase
+
+        return allUnreadItems.filter { item in
+            item.title.localizedLowercase.contains(lowercasedText) ||
+            (item.summary ?? "").localizedLowercase.contains(lowercasedText)
+        }
     }
 
     // MARK: - Formatters
@@ -391,6 +552,8 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
     func refreshSource(_ sender: NSMenuItem)
     func markAsReadById(_ itemId: String)
     func markAllAsRead()
+    func markSourceAsRead(_ sender: NSMenuItem)  // v1.3: 标记单个源为已读
+    func markTagAsRead(_ sender: NSMenuItem)      // v1.3: 标记 Tag 下所有源为已读
     func openManagement()
     func openSettings()
     func openAbout()

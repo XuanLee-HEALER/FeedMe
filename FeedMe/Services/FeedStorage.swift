@@ -99,6 +99,14 @@ final class FeedStorage {
             }
         }
 
+        // v3: 添加 Tag 分组字段
+        migrator.registerMigration("v3_add_tag") { db in
+            try db.alter(table: "feedSources") { t in
+                t.add(column: "tag", .text)  // nullable, nil = "未分类"
+            }
+            try db.create(index: "idx_feedSources_tag", on: "feedSources", columns: ["tag"])
+        }
+
         return migrator
     }
 }
@@ -334,6 +342,131 @@ extension FeedStorage {
                 return source.title
             }
             return "未知来源"
+        }
+    }
+}
+
+
+// MARK: - v1.3 Tag 分组相关查询
+
+extension FeedStorage {
+    /// 获取所有唯一 Tag（不包含 nil）
+    func fetchAllTags() throws -> [String] {
+        try dbQueue.read { db in
+            let tags = try String.fetchAll(
+                db,
+                sql: """
+                    SELECT DISTINCT tag
+                    FROM \(FeedSource.databaseTableName)
+                    WHERE tag IS NOT NULL
+                    ORDER BY tag COLLATE NOCASE
+                    """
+            )
+            return tags
+        }
+    }
+
+    /// 按 Tag 分组获取订阅源
+    /// - Returns: [(tag: String?, sources: [FeedSource])]
+    ///   - tag = nil 表示未分类订阅源
+    ///   - 未分类在前，Tag 分组在后（按字母/拼音排序）
+    func fetchSourcesGroupedByTag() throws -> [(tag: String?, sources: [FeedSource])] {
+        try dbQueue.read { db in
+            var result: [(tag: String?, sources: [FeedSource])] = []
+
+            // 1. 获取未分类订阅源 (tag IS NULL)
+            let ungroupedSources = try FeedSource
+                .filter(FeedSource.Columns.tag == nil)
+                .order(FeedSource.Columns.displayOrder)
+                .fetchAll(db)
+
+            if !ungroupedSources.isEmpty {
+                result.append((tag: nil, sources: ungroupedSources))
+            }
+
+            // 2. 获取所有 Tag
+            let tags = try fetchAllTags()
+
+            // 3. 获取每个 Tag 下的订阅源
+            for tag in tags {
+                let sources = try FeedSource
+                    .filter(FeedSource.Columns.tag == tag)
+                    .order(FeedSource.Columns.displayOrder)
+                    .fetchAll(db)
+
+                if !sources.isEmpty {
+                    result.append((tag: tag, sources: sources))
+                }
+            }
+
+            return result
+        }
+    }
+
+    /// 获取 Tag 下的未读计数
+    /// - Parameter tag: Tag 名称，nil 表示未分类
+    func fetchUnreadCountForTag(_ tag: String?) throws -> Int {
+        try dbQueue.read { db in
+            // 获取该 Tag 下的所有订阅源 ID
+            let sourceIds: [String]
+            if let tag = tag {
+                sourceIds = try FeedSource
+                    .filter(FeedSource.Columns.tag == tag)
+                    .select(FeedSource.Columns.id)
+                    .fetchAll(db)
+                    .map(\.id)
+            } else {
+                sourceIds = try FeedSource
+                    .filter(FeedSource.Columns.tag == nil)
+                    .select(FeedSource.Columns.id)
+                    .fetchAll(db)
+                    .map(\.id)
+            }
+
+            // 统计这些订阅源的未读数
+            if sourceIds.isEmpty {
+                return 0
+            }
+
+            return try FeedItem
+                .filter(sourceIds.contains(FeedItem.Columns.sourceId))
+                .filter(FeedItem.Columns.isRead == false)
+                .fetchCount(db)
+        }
+    }
+
+    /// 标记 Tag 下所有文章为已读
+    /// - Parameter tag: Tag 名称，nil 表示未分类
+    func markAllAsReadForTag(_ tag: String?) throws {
+        try dbQueue.write { db in
+            // 获取该 Tag 下的所有订阅源 ID
+            let sourceIds: [String]
+            if let tag = tag {
+                sourceIds = try FeedSource
+                    .filter(FeedSource.Columns.tag == tag)
+                    .select(FeedSource.Columns.id)
+                    .fetchAll(db)
+                    .map(\.id)
+            } else {
+                sourceIds = try FeedSource
+                    .filter(FeedSource.Columns.tag == nil)
+                    .select(FeedSource.Columns.id)
+                    .fetchAll(db)
+                    .map(\.id)
+            }
+
+            // 标记这些订阅源的所有文章为已读
+            if !sourceIds.isEmpty {
+                let placeholders = sourceIds.map { _ in "?" }.joined(separator: ",")
+                try db.execute(
+                    sql: """
+                        UPDATE \(FeedItem.databaseTableName)
+                        SET isRead = 1
+                        WHERE sourceId IN (\(placeholders))
+                        """,
+                    arguments: StatementArguments(sourceIds)
+                )
+            }
         }
     }
 }
