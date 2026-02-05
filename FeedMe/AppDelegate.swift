@@ -6,6 +6,7 @@
 //
 import Cocoa
 import SwiftUI
+import UserNotifications
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -40,8 +41,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 更新未读计数
         updateUnreadBadge()
 
-        // 请求通知权限
-        NotificationService.shared.requestAuthorization()
+        // 请求通知权限并打印状态（用于调试 Debug vs Release 差异）
+        Task {
+            await NotificationService.shared.printAuthorizationStatus()
+            let granted = await NotificationService.shared.requestAuthorizationIfNeeded()
+            if granted {
+                print("✅ 通知权限已授予")
+            } else {
+                print("⚠️ 通知权限未授予（用户可能需要在系统设置中手动开启）")
+            }
+        }
+        UNUserNotificationCenter.current().delegate = NotificationService.shared
 
         // 监听数据变化通知
         NotificationCenter.default.addObserver(

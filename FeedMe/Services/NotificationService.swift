@@ -26,6 +26,68 @@ final class NotificationService: NSObject {
         UNUserNotificationCenter.current().delegate = self
     }
 
+
+    /// 检查通知权限状态
+    func checkAuthorizationStatus() async -> UNAuthorizationStatus {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        return settings.authorizationStatus
+    }
+
+    /// 请求通知权限（如果需要）并返回是否授予
+    func requestAuthorizationIfNeeded() async -> Bool {
+        let status = await checkAuthorizationStatus()
+
+        switch status {
+        case .authorized, .provisional, .ephemeral:
+            return true
+
+        case .notDetermined:
+            // 未确定：请求权限
+            do {
+                let granted = try await UNUserNotificationCenter.current()
+                    .requestAuthorization(options: [.alert, .sound, .badge])
+                return granted
+            } catch {
+                print("❌ 通知权限请求失败: \(error)")
+                return false
+            }
+
+        case .denied:
+            // 已拒绝：无法请求，需要用户手动到系统设置中开启
+            print("⚠️ 通知权限已被拒绝，请到系统设置 → 通知中开启")
+            return false
+
+        @unknown default:
+            return false
+        }
+    }
+
+    /// 打印当前通知权限状态（用于调试）
+    func printAuthorizationStatus() async {
+        let status = await checkAuthorizationStatus()
+        let bundleId = Bundle.main.bundleIdentifier ?? "Unknown"
+        let appPath = Bundle.main.bundlePath
+
+        print("📱 通知权限状态检查:")
+        print("   Bundle ID: \(bundleId)")
+        print("   应用路径: \(appPath)")
+
+        switch status {
+        case .authorized:
+            print("   权限状态: ✅ 已授权")
+        case .denied:
+            print("   权限状态: ❌ 已拒绝")
+        case .notDetermined:
+            print("   权限状态: ❓ 未确定")
+        case .provisional:
+            print("   权限状态: ⚠️ 临时授权")
+        case .ephemeral:
+            print("   权限状态: ⏱ 临时（App Clip）")
+        @unknown default:
+            print("   权限状态: ❓ 未知")
+        }
+    }
+
     /// 发送新文章通知
     /// - Parameters:
     ///   - count: 新文章数量
