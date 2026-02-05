@@ -95,10 +95,11 @@ just clean-artifacts
 | `just test` | 运行测试 |
 | `just lint` | 代码检查（需要 swiftlint） |
 | `just format` | 代码格式化（需要 swiftformat） |
-| `just clean` | 清理编译产物 |
+| `just clean` | 清理所有（编译产物 + DMG + ZIP + 临时文件） |
+| `just clean-build` | 仅清理编译产物 |
+| `just clean-artifacts` | 仅清理发布产物（DMG、ZIP、临时文件） |
 | `just install` | 本地安装到 /Applications |
 | `just dmg VERSION` | 创建 DMG 安装包 |
-| `just clean-artifacts` | 清理发布产物（DMG 等） |
 | `just update-version VERSION` | 更新版本号 |
 | `just commit-version VERSION MSG` | 提交版本更新 |
 | `just gh-release VERSION` | 创建 GitHub Release |
@@ -109,13 +110,21 @@ just clean-artifacts
 
 ## 文件清理
 
-`.gitignore` 已配置忽略以下文件：
+### 清理命令
+
+- `just clean` - **推荐**：清理所有（编译产物 + 发布文件）
+- `just clean-build` - 仅清理编译产物
+- `just clean-artifacts` - 仅清理发布产物
+
+### 被清理的文件
+
 - `*.dmg` - DMG 安装包
+- `*.zip` - ZIP 压缩包
 - `dmg_temp/` - DMG 临时目录
 - `.release-notes.md` - Release notes 临时文件
 - `*.log` - 日志文件
 
-发布后记得运行 `just clean-artifacts` 清理这些文件。
+`.gitignore` 已配置忽略这些文件。
 
 ## 技巧
 
