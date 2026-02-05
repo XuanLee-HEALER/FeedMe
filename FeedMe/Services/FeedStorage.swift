@@ -177,9 +177,10 @@ extension FeedStorage {
     /// 保存文章列表（带去重）
     /// - Returns: 新增的文章数量
     @discardableResult
-    func saveItems(_ items: [FeedItem], for sourceId: String) throws -> Int {
+    func saveItems(_ items: [FeedItem], for sourceId: String) throws -> (newCount: Int, newItems: [FeedItem]) {
         try dbQueue.write { db in
             var newCount = 0
+            var newItems: [FeedItem] = []
 
             for var item in items {
                 // 检查是否存在
@@ -198,10 +199,11 @@ extension FeedStorage {
                     // 不存在：插入新条目
                     try item.insert(db)
                     newCount += 1
+                    newItems.append(item)
                 }
             }
 
-            return newCount
+            return (newCount: newCount, newItems: newItems)
         }
     }
 

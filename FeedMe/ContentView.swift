@@ -9,7 +9,7 @@ import SwiftUI
 
 /// 设置窗口
 struct ContentView: View {
-    @State private var settings = AppSettings.shared
+    @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
         Form {

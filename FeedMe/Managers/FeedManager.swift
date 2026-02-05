@@ -58,29 +58,29 @@ final class FeedManager: ObservableObject {
             let storage = FeedStorage.shared
             let sources = try storage.fetchEnabledSources()
 
-            // 记录刷新前的未读数
-            let previousUnreadCount = try storage.fetchUnreadCount()
-
             // 并发拉取所有源（网络请求本身已经是异步的）
             let results = await FeedFetcher.shared.fetchMultiple(sources: sources)
 
-            // 处理结果
-            var sourcesWithNewArticles: [String] = []
+            // 处理结果并收集新文章
+            var allNewArticles: [FeedItem] = []
+            var sourceNamesWithNewArticles: Set<String> = []
+
             for (source, result) in results {
-                let hasNew = processRefreshResultSync(source: source, result: result)
-                if hasNew {
-                    sourcesWithNewArticles.append(source.title)
+                let newItems = processRefreshResultSync(source: source, result: result)
+                if !newItems.isEmpty {
+                    allNewArticles.append(contentsOf: newItems)
+                    sourceNamesWithNewArticles.insert(source.title)
                 }
             }
 
-            // 计算新文章数量并发送通知
-            let currentUnreadCount = try storage.fetchUnreadCount()
-            let newArticleCount = max(0, currentUnreadCount - previousUnreadCount)
+            // 发送通知（如果有新文章）
+            if !allNewArticles.isEmpty {
+                // 按时间排序（最新的在前）
+                let sortedNewArticles = allNewArticles.sorted { $0.displayDate > $1.displayDate }
 
-            if newArticleCount > 0 {
                 NotificationService.shared.sendNewArticlesNotification(
-                    count: newArticleCount,
-                    sourceNames: sourcesWithNewArticles
+                    newArticles: sortedNewArticles,
+                    sourceNames: Array(sourceNamesWithNewArticles)
                 )
             }
 
@@ -97,7 +97,7 @@ final class FeedManager: ObservableObject {
 
     /// 同步处理刷新结果（在 MainActor 上下文中调用）
     /// - Returns: 是否有新文章
-    private func processRefreshResultSync(source: FeedSource, result: Result<FeedFetcher.FetchResult, Error>) -> Bool {
+    private func processRefreshResultSync(source: FeedSource, result: Result<FeedFetcher.FetchResult, Error>) -> [FeedItem] {
         do {
             var updatedSource = source
             let storage = FeedStorage.shared
@@ -107,27 +107,27 @@ final class FeedManager: ObservableObject {
                 switch fetchResult {
                 case .success(let data, let etag, let lastModified):
                     let items = try FeedParserService.parse(data: data, sourceId: source.id)
-                    let newCount = try storage.saveItems(items, for: source.id)
+                    let (_, newItems) = try storage.saveItems(items, for: source.id)
                     updatedSource.markSuccess(etag: etag, lastModified: lastModified)
                     try storage.updateSource(updatedSource)
-                    return newCount > 0
+                    return newItems
 
                 case .notModified:
                     updatedSource.markSuccess()
                     try storage.updateSource(updatedSource)
-                    return false
+                    return []
                 }
 
             case .failure(let error):
                 let errorMessage = (error as? FeedError)?.shortDescription ?? error.localizedDescription
                 updatedSource.markFailure(error: errorMessage)
                 try storage.updateSource(updatedSource)
-                return false
+                return []
             }
 
         } catch {
             print("Failed to process refresh result for \(source.title): \(error)")
-            return false
+            return []
         }
     }
 
@@ -157,13 +157,13 @@ final class FeedManager: ObservableObject {
                     let items = try FeedParserService.parse(data: data, sourceId: sourceId)
 
                     // 保存到数据库
-                    try storage.saveItems(items, for: sourceId)
+                    let (newCount, _) = try storage.saveItems(items, for: sourceId)
 
                     // 更新源状态
                     source.markSuccess(etag: etag, lastModified: lastModified)
                     try storage.updateSource(source)
 
-                    print("✅ Refreshed \(source.title): \(items.count) items")
+                    print("✅ Refreshed \(source.title): \(items.count) items (\(newCount) new)")
 
                 case .notModified:
                     // 304 未修改
@@ -217,8 +217,8 @@ final class FeedManager: ObservableObject {
                     // 解析文章
                     let items = try FeedParserService.parse(data: data, sourceId: source.id)
 
-                    // 保存到数据库（返回新增数量）
-                    let newCount = try storage.saveItems(items, for: source.id)
+                    // 保存到数据库（返回新增数量和新文章）
+                    let (newCount, _) = try storage.saveItems(items, for: source.id)
 
                     // 更新源状态
                     updatedSource.markSuccess(etag: etag, lastModified: lastModified)

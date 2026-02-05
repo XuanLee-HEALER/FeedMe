@@ -30,26 +30,30 @@ final class NotificationService: NSObject {
     /// - Parameters:
     ///   - count: 新文章数量
     ///   - sourceNames: 来源名称列表
-    func sendNewArticlesNotification(count: Int, sourceNames: [String]) {
+    func sendNewArticlesNotification(newArticles: [FeedItem], sourceNames: [String]) {
         guard AppSettings.shared.enableNotifications else { return }
-        guard count > 0 else { return }
+        guard !newArticles.isEmpty else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = "FeedMe"
+        let count = newArticles.count
 
-        if count == 1 {
-            content.body = "1 篇新文章"
+        // 标题
+        content.title = "\(count) 篇新文章"
+
+        // 正文策略
+        if count <= 3 {
+            // 1-3 篇：逐行列出每篇文章标题（单行截断）
+            let titles = newArticles.prefix(3).map { truncateTitle($0.title, maxLength: 60) }
+            content.body = titles.joined(separator: "\n")
         } else {
-            content.body = "\(count) 篇新文章"
-        }
+            // 4 篇及以上：显示前 2 篇 + 汇总
+            let topTitles = newArticles.prefix(2).map { truncateTitle($0.title, maxLength: 60) }
+            let remaining = count - 2
 
-        if !sourceNames.isEmpty {
-            let sources = sourceNames.prefix(3).joined(separator: ", ")
-            if sourceNames.count > 3 {
-                content.body += "\n来自 \(sources) 等"
-            } else {
-                content.body += "\n来自 \(sources)"
-            }
+            var bodyLines = topTitles
+            bodyLines.append("以及来自 \(sourceNames.count) 个订阅源的 \(remaining) 篇文章")
+
+            content.body = bodyLines.joined(separator: "\n")
         }
 
         content.sound = .default
@@ -66,6 +70,15 @@ final class NotificationService: NSObject {
                 print("Failed to send notification: \(error)")
             }
         }
+    }
+
+    /// 截断标题（单行截断）
+    private func truncateTitle(_ title: String, maxLength: Int) -> String {
+        if title.count <= maxLength {
+            return title
+        }
+        let truncated = String(title.prefix(maxLength - 3))
+        return truncated + "..."
     }
 
     /// 清除所有通知
