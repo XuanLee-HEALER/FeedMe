@@ -172,21 +172,37 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
 
         do {
             let storage = FeedStorage.shared
+
+            // 一次性获取所有数据，避免数据库重入
             let groupedSources = try storage.fetchSourcesGroupedByTag()
+
+            // 预先获取所有订阅源的未读数（在单独的事务中）
+            var unreadCounts: [String: Int] = [:] // sourceId -> unreadCount
+            for (_, sources) in groupedSources {
+                for source in sources {
+                    let count = try storage.fetchUnreadCount(for: source.id)
+                    unreadCounts[source.id] = count
+                }
+            }
 
             if !groupedSources.isEmpty {
                 // 按 Tag 分组展示订阅源
                 for (tag, sources) in groupedSources {
                     if let tag = tag {
                         // Tag 分组：创建二级菜单
-                        let unreadCount = try storage.fetchUnreadCountForTag(tag)
-                        let tagTitle = "\(tag) (\(unreadCount))"
+                        // 计算 Tag 的未读总数
+                        let tagUnreadCount = sources.reduce(0) { sum, source in
+                            sum + (unreadCounts[source.id] ?? 0)
+                        }
+
+                        let tagTitle = "\(tag) (\(tagUnreadCount))"
                         let tagItem = NSMenuItem(title: tagTitle, action: nil, keyEquivalent: "")
                         let tagSubmenu = NSMenu()
 
                         // 添加该 Tag 下的所有订阅源
                         for source in sources {
-                            tagSubmenu.addItem(buildSourceMenuItem(source))
+                            let sourceUnreadCount = unreadCounts[source.id] ?? 0
+                            tagSubmenu.addItem(buildSourceMenuItem(source, unreadCount: sourceUnreadCount))
                         }
 
                         // 分隔线
@@ -202,7 +218,7 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
                         )
                         markTagReadItem.target = delegate
                         markTagReadItem.representedObject = tag
-                        markTagReadItem.isEnabled = unreadCount > 0
+                        markTagReadItem.isEnabled = tagUnreadCount > 0
                         tagSubmenu.addItem(markTagReadItem)
 
                         tagItem.submenu = tagSubmenu
@@ -210,7 +226,8 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
                     } else {
                         // 未分类订阅源：直接平铺展示（与 Tag 分组同级）
                         for source in sources {
-                            menu.addItem(buildSourceMenuItem(source))
+                            let sourceUnreadCount = unreadCounts[source.id] ?? 0
+                            menu.addItem(buildSourceMenuItem(source, unreadCount: sourceUnreadCount))
                         }
                     }
                 }
@@ -295,7 +312,7 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
     /// 构建单个订阅源的菜单项（带子菜单）
     /// - Parameter source: 订阅源
     /// - Returns: NSMenuItem
-    private func buildSourceMenuItem(_ source: FeedSource) -> NSMenuItem {
+    private func buildSourceMenuItem(_ source: FeedSource, unreadCount: Int) -> NSMenuItem {
         let sourceItem = NSMenuItem(title: source.title, action: nil, keyEquivalent: "")
 
         // 禁用的源置灰
@@ -338,21 +355,16 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
         // 分隔线
         submenu.addItem(NSMenuItem.separator())
 
-        // 单个源的"标记为已读"
-        do {
-            let unreadCount = try FeedStorage.shared.fetchUnreadCount(for: source.id)
-            let markReadItem = NSMenuItem(
-                title: "标记为已读",
-                action: #selector(MenuBuilderDelegate.markSourceAsRead(_:)),
-                keyEquivalent: ""
-            )
-            markReadItem.target = delegate
-            markReadItem.representedObject = source.id
-            markReadItem.isEnabled = unreadCount > 0
-            submenu.addItem(markReadItem)
-        } catch {
-            print("Failed to fetch unread count for source \(source.id): \(error)")
-        }
+        // 单个源的"标记为已读"（使用传入的未读数，避免数据库重入）
+        let markReadItem = NSMenuItem(
+            title: "标记为已读",
+            action: #selector(MenuBuilderDelegate.markSourceAsRead(_:)),
+            keyEquivalent: ""
+        )
+        markReadItem.target = delegate
+        markReadItem.representedObject = source.id
+        markReadItem.isEnabled = unreadCount > 0
+        submenu.addItem(markReadItem)
 
         sourceItem.submenu = submenu
         return sourceItem

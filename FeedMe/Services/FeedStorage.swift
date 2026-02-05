@@ -383,8 +383,16 @@ extension FeedStorage {
                 result.append((tag: nil, sources: ungroupedSources))
             }
 
-            // 2. 获取所有 Tag
-            let tags = try fetchAllTags()
+            // 2. 直接获取所有唯一 Tag（避免重入，不调用 fetchAllTags()）
+            let tags = try String.fetchAll(
+                db,
+                sql: """
+                    SELECT DISTINCT tag
+                    FROM \(FeedSource.databaseTableName)
+                    WHERE tag IS NOT NULL
+                    ORDER BY tag COLLATE NOCASE
+                    """
+            )
 
             // 3. 获取每个 Tag 下的订阅源
             for tag in tags {
