@@ -161,12 +161,11 @@ struct FeedManagementView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text("订阅源管理")
-                        .font(.headline)
+                    Text("")
                 }
             }
         }
-        .navigationSplitViewColumnWidth(min: 280, ideal: 350, max: 500)
+        .navigationSplitViewColumnWidth(min: 300, ideal: 400, max: 550)
         .sheet(isPresented: $showingAddSheet) {
             AddFeedSheet { newSource in
                 addSource(newSource)
@@ -377,6 +376,17 @@ struct FeedSourceDetailView: View {
     @State private var editedRefreshInterval: Int = 0
     @State private var editedTag: String = ""
 
+    // Tag 编辑模式
+    @State private var isEditingTag = false
+    @State private var savedTags: [String] = []
+
+    // 焦点管理
+    enum Field: Hashable {
+        case title, feedURL, tag
+    }
+
+    @FocusState private var focusedField: Field?
+
     /// 自动保存任务
     @State private var saveTask: Task<Void, Never>?
 
@@ -385,12 +395,14 @@ struct FeedSourceDetailView: View {
             Section("基本信息") {
                 TextField("名称", text: $editedTitle)
                     .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .title)
                     .onChange(of: editedTitle) {
                         scheduleSave()
                     }
 
                 TextField("Feed URL", text: $editedFeedURL)
                     .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .feedURL)
                     .onChange(of: editedFeedURL) {
                         scheduleSave()
                     }
@@ -419,14 +431,86 @@ struct FeedSourceDetailView: View {
             }
 
             Section("分组") {
-                TextField("标签（可选）", text: $editedTag)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: editedTag) {
-                        scheduleSave()
+                if isEditingTag {
+                    // 编辑模式
+                    HStack {
+                        TextField("输入标签名称", text: $editedTag)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .tag)
+                            .onSubmit {
+                                isEditingTag = false
+                                scheduleSave()
+                                loadSavedTags()
+                            }
+
+                        if !editedTag.isEmpty {
+                            Button {
+                                editedTag = ""
+                                isEditingTag = false
+                                scheduleSave()
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Button("完成") {
+                            isEditingTag = false
+                            scheduleSave()
+                            loadSavedTags()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                     }
-                Text("留空表示未分类")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+
+                    // 已保存的标签快速选择
+                    if !savedTags.isEmpty {
+                        FlowLayout(spacing: 6) {
+                            ForEach(savedTags, id: \.self) { tag in
+                                TagChip(
+                                    name: tag,
+                                    isSelected: editedTag == tag,
+                                    onSelect: {
+                                        editedTag = tag
+                                        isEditingTag = false
+                                        scheduleSave()
+                                    },
+                                    onDelete: {
+                                        removeTagFromAllSources(tag)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    // 查看模式
+                    HStack {
+                        if editedTag.isEmpty {
+                            Text("未分类")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(editedTag)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.accentColor.opacity(0.15))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                        }
+
+                        Spacer()
+
+                        Button("编辑") {
+                            isEditingTag = true
+                            loadSavedTags()
+                            // 延迟设置焦点，等视图更新
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                focusedField = .tag
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                    }
+                }
             }
 
             Section("状态") {
@@ -465,11 +549,22 @@ struct FeedSourceDetailView: View {
             }
         }
         .formStyle(.grouped)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // 点击空白区域取消焦点
+            focusedField = nil
+            if isEditingTag {
+                isEditingTag = false
+                scheduleSave()
+            }
+        }
         .onAppear {
             syncFromSource()
         }
         .onChange(of: source.id) {
             syncFromSource()
+            isEditingTag = false
+            focusedField = nil
         }
     }
 
@@ -480,6 +575,36 @@ struct FeedSourceDetailView: View {
         editedIsEnabled = source.isEnabled
         editedRefreshInterval = source.refreshIntervalMinutes
         editedTag = source.tag ?? ""
+    }
+
+    /// 加载已保存的 Tags
+    private func loadSavedTags() {
+        do {
+            savedTags = try FeedStorage.shared.fetchAllTags()
+        } catch {
+            print("Failed to load tags: \(error)")
+        }
+    }
+
+    /// 从所有源中移除指定 Tag
+    private func removeTagFromAllSources(_ tag: String) {
+        do {
+            let sources = try FeedStorage.shared.fetchAllSources()
+            for var s in sources where s.tag == tag {
+                s.tag = nil
+                try FeedStorage.shared.updateSource(s)
+            }
+            // 如果当前源使用了这个 Tag，也清除
+            if editedTag == tag {
+                editedTag = ""
+                scheduleSave()
+            }
+            loadSavedTags()
+            // 通知刷新列表
+            NotificationCenter.default.post(name: .feedDataDidChange, object: nil)
+        } catch {
+            print("Failed to remove tag: \(error)")
+        }
     }
 
     /// 延迟保存（用于 TextField，防止频繁保存）
@@ -519,6 +644,83 @@ struct FeedSourceDetailView: View {
 
         source = updatedSource
         onSave(updatedSource)
+    }
+}
+
+// MARK: - TagChip
+
+/// 标签选择芯片，支持选择和删除
+struct TagChip: View {
+    let name: String
+    let isSelected: Bool
+    let onSelect: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button(action: onSelect) {
+                Text(name)
+                    .font(.caption)
+                    .lineLimit(1)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onDelete) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(isSelected ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+// MARK: - FlowLayout
+
+/// 流式布局，自动换行
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        let result = layout(in: proposal.width ?? 0, subviews: subviews)
+        return result.size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        let result = layout(in: bounds.width, subviews: subviews)
+        for (index, position) in result.positions.enumerated() {
+            subviews[index].place(
+                at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y),
+                proposal: .unspecified
+            )
+        }
+    }
+
+    private func layout(in width: CGFloat, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
+        var positions: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var maxWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > width, x > 0 {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            positions.append(CGPoint(x: x, y: y))
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+            maxWidth = max(maxWidth, x)
+        }
+
+        return (CGSize(width: maxWidth, height: y + rowHeight), positions)
     }
 }
 

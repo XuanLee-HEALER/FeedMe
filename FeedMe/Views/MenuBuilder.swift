@@ -11,6 +11,9 @@ import Cocoa
 final class MenuBuilder: NSObject, NSMenuDelegate {
     weak var delegate: MenuBuilderDelegate?
 
+    /// 搜索框后分隔线的 tag 标识，用于定位文章列表的起始位置
+    private let kSearchSeparatorTag = 1001
+
     /// 当前高亮的菜单项（用于清除旧高亮）
     private weak var currentHighlightedItem: NSMenuItem?
 
@@ -21,6 +24,7 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
     private weak var searchView: SearchMenuItemView?
     private var allUnreadItems = [FeedItem]()
     private var sourceNameCache = [String: String]()
+    private var sourceTagCache = [String: String]()
 
     /// 构建左键菜单（文章列表）
     func buildArticleListMenu() -> NSMenu {
@@ -62,14 +66,10 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
             menu.addItem(searchMenuItem)
             self.searchView = searchView
 
-            menu.addItem(NSMenuItem.separator())
-
-            // 顶部：最近更新
-            let headerItem = NSMenuItem(title: "最近更新", action: nil, keyEquivalent: "")
-            headerItem.isEnabled = false
-            menu.addItem(headerItem)
-
-            menu.addItem(NSMenuItem.separator())
+            // 搜索框后的分隔线，用 tag 标识作为锚点
+            let searchSeparator = NSMenuItem.separator()
+            searchSeparator.tag = kSearchSeparatorTag
+            menu.addItem(searchSeparator)
 
             // 获取全部未读文章，按时间倒序排列
             let allUnread = try storage.fetchItems(unreadOnly: true)
@@ -78,78 +78,20 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
             // 保存到实例变量，供搜索使用
             allUnreadItems = sortedUnread
 
-            // 预加载源名称缓存
+            // 预加载源名称和标签缓存
             var sourceNameCache: [String: String] = [:]
+            var sourceTagCache: [String: String] = [:]
             for source in sources {
                 sourceNameCache[source.id] = source.title
+                if let tag = source.tag {
+                    sourceTagCache[source.id] = tag
+                }
             }
             self.sourceNameCache = sourceNameCache
+            self.sourceTagCache = sourceTagCache
 
-            if sortedUnread.isEmpty {
-                // 空状态：全部已读
-                let allReadItem = NSMenuItem(title: "✓ 全部已读", action: nil, keyEquivalent: "")
-                allReadItem.isEnabled = false
-                menu.addItem(allReadItem)
-            } else {
-                // 取前 displayCount 条显示在主列表
-                let displayCount = settings.displayCount
-                let topItems = Array(sortedUnread.prefix(displayCount))
-                let remainingItems = Array(sortedUnread.dropFirst(displayCount))
-
-                // 添加两行展示的文章条目
-                for item in topItems {
-                    let sourceName = sourceNameCache[item.sourceId] ?? "未知来源"
-                    menu.addItem(createTwoLineArticleMenuItem(item, sourceName: sourceName))
-                }
-
-                // 折叠"更多" - 按源分组的二级结构
-                if !remainingItems.isEmpty {
-                    menu.addItem(NSMenuItem.separator())
-                    let moreItem = NSMenuItem(title: "… 更多 (\(remainingItems.count))", action: nil, keyEquivalent: "")
-                    let moreSubmenu = NSMenu()
-
-                    // 将剩余文章按源分组
-                    let groupedBySource = Dictionary(grouping: remainingItems) { $0.sourceId }
-
-                    // 按源名称排序
-                    let sortedSources = try storage.fetchAllSourcesSortedByName()
-
-                    for source in sortedSources {
-                        guard let items = groupedBySource[source.id], !items.isEmpty else { continue }
-
-                        let sourceItem = NSMenuItem(title: "\(source.title) (\(items.count))", action: nil, keyEquivalent: "")
-                        let sourceSubmenu = NSMenu()
-
-                        // 按时间倒序排列该源下的文章
-                        let sortedSourceItems = items.sorted { $0.displayDate > $1.displayDate }
-
-                        for item in sortedSourceItems {
-                            // 二级菜单使用简单的单行展示：时间 · 标题
-                            sourceSubmenu.addItem(createSimpleArticleMenuItem(item))
-                        }
-
-                        sourceItem.submenu = sourceSubmenu
-                        moreSubmenu.addItem(sourceItem)
-                    }
-
-                    moreItem.submenu = moreSubmenu
-                    menu.addItem(moreItem)
-                }
-            }
-
-            // 底部操作
-            menu.addItem(NSMenuItem.separator())
-
-            if !sortedUnread.isEmpty {
-                let markAllReadItem = NSMenuItem(title: "全部标为已读", action: #selector(MenuBuilderDelegate.markAllAsRead), keyEquivalent: "")
-                markAllReadItem.target = delegate
-                menu.addItem(markAllReadItem)
-            }
-
-            // 刷新全部源
-            let refreshItem = NSMenuItem(title: "刷新全部源", action: #selector(MenuBuilderDelegate.refreshAll), keyEquivalent: "r")
-            refreshItem.target = delegate
-            menu.addItem(refreshItem)
+            // 填充文章列表和底部操作
+            try populateDefaultArticleItems(menu: menu, sortedUnread: sortedUnread)
 
         } catch {
             // 错误状态
@@ -195,7 +137,7 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
                             sum + (unreadCounts[source.id] ?? 0)
                         }
 
-                        let tagTitle = "\(tag) (\(tagUnreadCount))"
+                        let tagTitle = "\(tag)(\(sources.count))"
                         let tagItem = NSMenuItem(title: tagTitle, action: nil, keyEquivalent: "")
                         let tagSubmenu = NSMenu()
 
@@ -376,45 +318,135 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
 
         let trimmedText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // 如果搜索文本为空，重建整个菜单
+        // 找到搜索框后的分隔线作为锚点
+        guard let separatorIndex = menu.items.firstIndex(where: { $0.tag == kSearchSeparatorTag }) else { return }
+
+        // 移除分隔线之后的所有内容
+        while menu.items.count > separatorIndex + 1 {
+            menu.removeItem(at: separatorIndex + 1)
+        }
+
         if trimmedText.isEmpty {
-            // 移除所有项并重建
-            menu.removeAllItems()
-            let newMenu = buildArticleListMenu()
-            for item in newMenu.items {
-                menu.addItem(item)
+            // 清空搜索：恢复为原始 displayCount 条 + "更多" 结构
+            do {
+                try populateDefaultArticleItems(menu: menu, sortedUnread: allUnreadItems)
+            } catch {
+                print("Failed to restore article list: \(error)")
             }
-            return
+        } else {
+            // 搜索过滤
+            let filteredItems = filterArticles(searchText: trimmedText)
+            populateSearchResults(menu: menu, filteredItems: filteredItems)
         }
+    }
 
-        // 执行搜索过滤
-        let filteredItems = filterArticles(searchText: trimmedText)
+    /// 填充默认文章列表（displayCount 条 + "更多" 折叠 + 底部操作）
+    private func populateDefaultArticleItems(menu: NSMenu, sortedUnread: [FeedItem]) throws {
+        let settings = AppSettings.shared
+        let storage = FeedStorage.shared
 
-        // 重建菜单内容（保留搜索框和 header）
-        // 找到"最近更新" header 的位置
-        var headerIndex = -1
-        for (index, item) in menu.items.enumerated() {
-            if item.title == "最近更新" {
-                headerIndex = index
-                break
+        if sortedUnread.isEmpty {
+            let allReadItem = NSMenuItem(title: "✓ 全部已读", action: nil, keyEquivalent: "")
+            allReadItem.isEnabled = false
+            menu.addItem(allReadItem)
+        } else {
+            let displayCount = settings.displayCount
+            let topItems = Array(sortedUnread.prefix(displayCount))
+            let remainingItems = Array(sortedUnread.dropFirst(displayCount))
+
+            for item in topItems {
+                let sourceName = sourceNameCache[item.sourceId] ?? "未知来源"
+                menu.addItem(createTwoLineArticleMenuItem(item, sourceName: sourceName))
+            }
+
+            // "…" 子菜单 - 全部未读文章按 Tag→源→文章的层级分组浏览
+            if sortedUnread.count > displayCount {
+                menu.addItem(NSMenuItem.separator())
+                let moreItem = NSMenuItem(title: "…", action: nil, keyEquivalent: "")
+                let moreSubmenu = NSMenu()
+                moreSubmenu.autoenablesItems = false
+
+                // 用全部未读文章按源分组
+                let groupedBySource = Dictionary(grouping: sortedUnread) { $0.sourceId }
+
+                // 按 Tag 分组源
+                var tagSourceMap: [String: [String]] = [:] // tag -> [sourceId]
+                var ungroupedSourceIds: [String] = []
+
+                for (sourceId, _) in groupedBySource {
+                    if let tag = sourceTagCache[sourceId] {
+                        tagSourceMap[tag, default: []].append(sourceId)
+                    } else {
+                        ungroupedSourceIds.append(sourceId)
+                    }
+                }
+
+                // 先添加有 Tag 的组（按 Tag 名排序）
+                for tag in tagSourceMap.keys.sorted(by: { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }) {
+                    let sourceIds = tagSourceMap[tag]!
+                    let tagArticleCount = sourceIds.reduce(0) { $0 + (groupedBySource[$1]?.count ?? 0) }
+                    let tagItem = NSMenuItem(title: "\(tag)[\(sourceIds.count)](\(tagArticleCount))", action: nil, keyEquivalent: "")
+                    let tagSubmenu = NSMenu()
+                    tagSubmenu.autoenablesItems = false
+
+                    for sourceId in sourceIds.sorted(by: { (sourceNameCache[$0] ?? "") < (sourceNameCache[$1] ?? "") }) {
+                        guard let items = groupedBySource[sourceId], !items.isEmpty else { continue }
+                        let sourceName = sourceNameCache[sourceId] ?? "未知来源"
+                        let sourceItem = NSMenuItem(title: "\(sourceName) (\(items.count))", action: nil, keyEquivalent: "")
+                        let sourceSubmenu = NSMenu()
+                        sourceSubmenu.autoenablesItems = false
+                        for item in items.sorted(by: { $0.displayDate > $1.displayDate }) {
+                            sourceSubmenu.addItem(createSimpleArticleMenuItem(item))
+                        }
+                        sourceItem.submenu = sourceSubmenu
+                        tagSubmenu.addItem(sourceItem)
+                    }
+
+                    tagItem.submenu = tagSubmenu
+                    moreSubmenu.addItem(tagItem)
+                }
+
+                // 未分类源排在最后，直接平铺
+                for sourceId in ungroupedSourceIds.sorted(by: { (sourceNameCache[$0] ?? "") < (sourceNameCache[$1] ?? "") }) {
+                    guard let items = groupedBySource[sourceId], !items.isEmpty else { continue }
+                    let sourceName = sourceNameCache[sourceId] ?? "未知来源"
+                    let sourceItem = NSMenuItem(title: "\(sourceName) (\(items.count))", action: nil, keyEquivalent: "")
+                    let sourceSubmenu = NSMenu()
+                    sourceSubmenu.autoenablesItems = false
+                    for item in items.sorted(by: { $0.displayDate > $1.displayDate }) {
+                        sourceSubmenu.addItem(createSimpleArticleMenuItem(item))
+                    }
+                    sourceItem.submenu = sourceSubmenu
+                    moreSubmenu.addItem(sourceItem)
+                }
+
+                moreItem.submenu = moreSubmenu
+                menu.addItem(moreItem)
             }
         }
 
-        guard headerIndex >= 0 else { return }
+        // 底部操作
+        menu.addItem(NSMenuItem.separator())
 
-        // 移除 header 之后的所有内容
-        while menu.items.count > headerIndex + 2 { // 保留 header 和其后的分隔线
-            menu.removeItem(at: headerIndex + 2)
+        if !sortedUnread.isEmpty {
+            let markAllReadItem = NSMenuItem(title: "全部标为已读", action: #selector(MenuBuilderDelegate.markAllAsRead), keyEquivalent: "")
+            markAllReadItem.target = delegate
+            menu.addItem(markAllReadItem)
         }
 
-        // 显示搜索结果
+        let refreshItem = NSMenuItem(title: "刷新全部源", action: #selector(MenuBuilderDelegate.refreshAll), keyEquivalent: "r")
+        refreshItem.target = delegate
+        menu.addItem(refreshItem)
+    }
+
+    /// 填充搜索结果（最多 20 条 + 更多提示 + 底部操作）
+    private func populateSearchResults(menu: NSMenu, filteredItems: [FeedItem]) {
         if filteredItems.isEmpty {
             let emptyItem = NSMenuItem(title: "未找到相关文章", action: nil, keyEquivalent: "")
             emptyItem.isEnabled = false
             menu.addItem(emptyItem)
         } else {
-            // 添加搜索结果（最多显示 50 条）
-            let maxResults = 50
+            let maxResults = 20
             let displayItems = Array(filteredItems.prefix(maxResults))
 
             for item in displayItems {
@@ -507,10 +539,8 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
 
             // 如果主列表已空，显示"全部已读"
             if currentArticleCount == 0, sortedUnread.isEmpty {
-                // 找到"最近更新"标题后的分隔符
-                if let separatorIndex = menu.items.firstIndex(where: { $0.isSeparatorItem && $0.title.isEmpty }),
-                   separatorIndex > 0
-                {
+                // 找到搜索框后的分隔线作为锚点
+                if let separatorIndex = menu.items.firstIndex(where: { $0.tag == kSearchSeparatorTag }) {
                     let allReadItem = NSMenuItem(title: "✓ 全部已读", action: nil, keyEquivalent: "")
                     allReadItem.isEnabled = false
                     menu.insertItem(allReadItem, at: separatorIndex + 1)
