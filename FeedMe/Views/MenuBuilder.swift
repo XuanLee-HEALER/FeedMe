@@ -37,7 +37,6 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
 
         do {
             let storage = FeedStorage.shared
-            let settings = AppSettings.shared
 
             // 检查是否有订阅源
             let sources = try storage.fetchAllSources()
@@ -343,7 +342,6 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
     /// 填充默认文章列表（displayCount 条 + "更多" 折叠 + 底部操作）
     private func populateDefaultArticleItems(menu: NSMenu, sortedUnread: [FeedItem]) throws {
         let settings = AppSettings.shared
-        let storage = FeedStorage.shared
 
         if sortedUnread.isEmpty {
             let allReadItem = NSMenuItem(title: "✓ 全部已读", action: nil, keyEquivalent: "")
@@ -352,7 +350,6 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
         } else {
             let displayCount = settings.displayCount
             let topItems = Array(sortedUnread.prefix(displayCount))
-            let remainingItems = Array(sortedUnread.dropFirst(displayCount))
 
             for item in topItems {
                 let sourceName = sourceNameCache[item.sourceId] ?? "未知来源"
