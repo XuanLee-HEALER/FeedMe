@@ -36,9 +36,15 @@ build-release:
     @xcodebuild -project {{xcodeproj}} -scheme {{scheme}} -configuration Release clean build 2>&1 | grep -E "(error:|warning:|BUILD)" | grep -v "appintentsmetadataprocessor" || true
     @echo ""
 
-# 运行测试
+# 运行单元测试
 test:
-    @echo "🧪 运行测试..."
+    @echo "🧪 运行单元测试..."
+    @xcodebuild test -project {{xcodeproj}} -scheme {{scheme}} -only-testing:FeedMeTests 2>&1 | grep -E "(Test Suite|Test run|Executed|passed|failed|SUCCEEDED|FAILED|✔|✘|◇)" || true
+    @echo ""
+
+# 运行所有测试（包含 UI 测试）
+test-all:
+    @echo "🧪 运行所有测试..."
     @xcodebuild test -project {{xcodeproj}} -scheme {{scheme}} 2>&1 | grep -E "(Test Suite|Executed|FAILED)" || true
     @echo ""
 

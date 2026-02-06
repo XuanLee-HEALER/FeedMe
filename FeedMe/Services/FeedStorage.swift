@@ -22,7 +22,7 @@ final class FeedStorage {
         }
     }()
 
-    /// 初始化
+    /// 初始化（生产环境使用）
     private init() throws {
         // 数据库路径: ~/Library/Application Support/FeedMe/
         let fileManager = FileManager.default
@@ -44,11 +44,17 @@ final class FeedStorage {
         dbQueue = try DatabaseQueue(path: dbURL.path, configuration: config)
 
         // 运行迁移
-        try migrator.migrate(dbQueue)
+        try Self.migrator.migrate(dbQueue)
+    }
+
+    /// 初始化（测试用，接受外部 dbQueue）
+    init(dbQueue: DatabaseQueue) throws {
+        self.dbQueue = dbQueue
+        try Self.migrator.migrate(dbQueue)
     }
 
     /// 数据库迁移器
-    private var migrator: DatabaseMigrator {
+    static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
 
         // v1: 初始表结构
@@ -373,17 +379,7 @@ extension FeedStorage {
         try dbQueue.read { db in
             var result: [(tag: String?, sources: [FeedSource])] = []
 
-            // 1. 获取未分类订阅源 (tag IS NULL)
-            let ungroupedSources = try FeedSource
-                .filter(FeedSource.Columns.tag == nil)
-                .order(FeedSource.Columns.displayOrder)
-                .fetchAll(db)
-
-            if !ungroupedSources.isEmpty {
-                result.append((tag: nil, sources: ungroupedSources))
-            }
-
-            // 2. 直接获取所有唯一 Tag（避免重入，不调用 fetchAllTags()）
+            // 1. 先获取所有唯一 Tag（分组排在前面）
             let tags = try String.fetchAll(
                 db,
                 sql: """
@@ -394,7 +390,7 @@ extension FeedStorage {
                     """
             )
 
-            // 3. 获取每个 Tag 下的订阅源
+            // 2. 获取每个 Tag 下的订阅源
             for tag in tags {
                 let sources = try FeedSource
                     .filter(FeedSource.Columns.tag == tag)
@@ -404,6 +400,16 @@ extension FeedStorage {
                 if !sources.isEmpty {
                     result.append((tag: tag, sources: sources))
                 }
+            }
+
+            // 3. 未分类订阅源排在最后
+            let ungroupedSources = try FeedSource
+                .filter(FeedSource.Columns.tag == nil)
+                .order(FeedSource.Columns.displayOrder)
+                .fetchAll(db)
+
+            if !ungroupedSources.isEmpty {
+                result.append((tag: nil, sources: ungroupedSources))
             }
 
             return result
@@ -417,17 +423,19 @@ extension FeedStorage {
             // 获取该 Tag 下的所有订阅源 ID
             let sourceIds: [String]
             if let tag = tag {
-                sourceIds = try FeedSource
-                    .filter(FeedSource.Columns.tag == tag)
-                    .select(FeedSource.Columns.id)
-                    .fetchAll(db)
-                    .map(\.id)
+                sourceIds = try String.fetchAll(
+                    db,
+                    FeedSource
+                        .filter(FeedSource.Columns.tag == tag)
+                        .select(FeedSource.Columns.id)
+                )
             } else {
-                sourceIds = try FeedSource
-                    .filter(FeedSource.Columns.tag == nil)
-                    .select(FeedSource.Columns.id)
-                    .fetchAll(db)
-                    .map(\.id)
+                sourceIds = try String.fetchAll(
+                    db,
+                    FeedSource
+                        .filter(FeedSource.Columns.tag == nil)
+                        .select(FeedSource.Columns.id)
+                )
             }
 
             // 统计这些订阅源的未读数
@@ -449,17 +457,19 @@ extension FeedStorage {
             // 获取该 Tag 下的所有订阅源 ID
             let sourceIds: [String]
             if let tag = tag {
-                sourceIds = try FeedSource
-                    .filter(FeedSource.Columns.tag == tag)
-                    .select(FeedSource.Columns.id)
-                    .fetchAll(db)
-                    .map(\.id)
+                sourceIds = try String.fetchAll(
+                    db,
+                    FeedSource
+                        .filter(FeedSource.Columns.tag == tag)
+                        .select(FeedSource.Columns.id)
+                )
             } else {
-                sourceIds = try FeedSource
-                    .filter(FeedSource.Columns.tag == nil)
-                    .select(FeedSource.Columns.id)
-                    .fetchAll(db)
-                    .map(\.id)
+                sourceIds = try String.fetchAll(
+                    db,
+                    FeedSource
+                        .filter(FeedSource.Columns.tag == nil)
+                        .select(FeedSource.Columns.id)
+                )
             }
 
             // 标记这些订阅源的所有文章为已读

@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		46EFD22D2F31CB6F00C9F513 /* FeedKit in Frameworks */ = {isa = PBXBuildFile; productRef = 46EFD22C2F31CB6F00C9F513 /* FeedKit */; };
 		46EFD2302F31CD2500C9F513 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 46EFD22F2F31CD2500C9F513 /* GRDB */; };
+		46EFD2402F3A000100C9F513 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 46EFD23F2F3A000100C9F513 /* GRDB */; };
+		46EFD2422F3A000100C9F513 /* FeedKit in Frameworks */ = {isa = PBXBuildFile; productRef = 46EFD2412F3A000100C9F513 /* FeedKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -79,6 +81,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				46EFD2402F3A000100C9F513 /* GRDB in Frameworks */,
+				46EFD2422F3A000100C9F513 /* FeedKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -157,6 +161,8 @@
 			);
 			name = FeedMeTests;
 			packageProductDependencies = (
+				46EFD23F2F3A000100C9F513 /* GRDB */,
+				46EFD2412F3A000100C9F513 /* FeedKit */,
 			);
 			productName = FeedMeTests;
 			productReference = 46EFD2062F31947300C9F513 /* FeedMeTests.xctest */;
@@ -635,6 +641,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 46EFD22E2F31CD2500C9F513 /* XCRemoteSwiftPackageReference "GRDB" */;
 			productName = GRDB;
+		};
+		46EFD23F2F3A000100C9F513 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 46EFD22E2F31CD2500C9F513 /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
+		};
+		46EFD2412F3A000100C9F513 /* FeedKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 46EFD22B2F31CB6F00C9F513 /* XCRemoteSwiftPackageReference "FeedKit" */;
+			productName = FeedKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
